@@ -10,7 +10,7 @@ I've created a complete SQL schema script that will run automatically when Postg
 ## Quick Fix - Run This
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/UniversoteBook
 
 # Step 1: Stop containers
 sudo docker compose down

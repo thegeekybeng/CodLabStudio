@@ -33,7 +33,7 @@ After rebuilding the frontend:
 Run on your NAS:
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/UniversoteBook
 
 # Rebuild frontend
 sudo docker compose build frontend

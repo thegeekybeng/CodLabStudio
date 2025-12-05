@@ -24,14 +24,14 @@ All scripts are designed to be run on your NAS or deployment server. They assume
 **APPLY_CHANGES.sh** - Apply backend changes (admin seeding, registration disable, guest mode)
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/CodLabStudio
 bash scripts/setup/APPLY_CHANGES.sh
 ```
 
 **RUN_THIS_NOW.sh** - Complete initial setup (database, containers, schema)
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/CodLabStudio
 bash scripts/setup/RUN_THIS_NOW.sh
 ```
 
@@ -40,7 +40,7 @@ bash scripts/setup/RUN_THIS_NOW.sh
 **FINAL_FIX.sh** - Fix Prisma client generation and restart backend
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/CodLabStudio
 bash scripts/troubleshooting/FINAL_FIX.sh
 ```
 
@@ -49,7 +49,7 @@ bash scripts/troubleshooting/FINAL_FIX.sh
 **TEST_BACKEND.sh** - Test backend endpoints and connectivity
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/CodLabStudio
 bash scripts/utils/TEST_BACKEND.sh
 ```
 

@@ -9,8 +9,8 @@ const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
  * Useful for troubleshooting login issues
  */
 export async function resetAdminPassword(): Promise<void> {
-  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@universalnotebook.local';
-  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@UniversalNotebook2024!';
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@codlabstudio.local';
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@CodLabStudio2024!';
 
   try {
     const admin = await prisma.user.findUnique({
@@ -43,8 +43,8 @@ export async function resetAdminPassword(): Promise<void> {
  * Verify admin password matches
  */
 export async function verifyAdminPassword(): Promise<boolean> {
-  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@universalnotebook.local';
-  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@UniversalNotebook2024!';
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@codlabstudio.local';
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@CodLabStudio2024!';
 
   try {
     const admin = await prisma.user.findUnique({

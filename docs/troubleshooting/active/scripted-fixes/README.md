@@ -9,7 +9,7 @@ Fixes Prisma client generation issues and restarts the backend.
 **Usage:**
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/CodLabStudio
 bash docs/troubleshooting/scripted-fixes/FINAL_FIX.sh
 ```
 

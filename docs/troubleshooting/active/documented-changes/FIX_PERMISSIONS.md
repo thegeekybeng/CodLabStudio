@@ -8,7 +8,7 @@ PostgreSQL container can't read `/docker-entrypoint-initdb.d/` due to permission
 Run these commands on your NAS:
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/UniversoteBook
 
 # Fix permissions on database/init directory
 sudo chmod -R 755 database/init

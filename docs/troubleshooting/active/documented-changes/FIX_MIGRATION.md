@@ -10,7 +10,7 @@
 ## Run This Now
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/UniversoteBook
 
 # Step 1: Generate Prisma client (if not done)
 sudo docker compose exec backend npm run db:generate

@@ -58,3 +58,16 @@ repos/
 
 # OpenMemory - IDE/Assistant specific rules
 .cursor/rules/openmemory.mdc
+
+# Personal IDE workspace files
+*.code-workspace
+
+# Global development rules (should be in ~/.cursor/, not project root)
+.ai-assistant-rules.md
+.development-rules.md
+.neatness-standard.md
+
+# Temporary troubleshooting scripts with personal information
+scripts/setup/RUN_THIS_NOW.sh
+scripts/setup/APPLY_CHANGES.sh
+docs/troubleshooting/active/scripted-fixes/FINAL_FIX.sh

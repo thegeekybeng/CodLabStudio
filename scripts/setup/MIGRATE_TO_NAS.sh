@@ -24,7 +24,7 @@ fi
 
 # Get NAS IP (if not set)
 if [ -z "$NAS_IP" ]; then
-    echo "Please enter your NAS IP address (e.g., 192.168.1.100):"
+    echo "Please enter your NAS IP address (e.g., 192.168.1.x):"
     read -r NAS_IP
 fi
 

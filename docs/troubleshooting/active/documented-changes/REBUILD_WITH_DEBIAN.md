@@ -9,7 +9,7 @@ Changed from `node:20-alpine` to `node:20-slim` (Debian-based) which has better 
 ## Rebuild Steps
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/UniversoteBook
 
 # Step 1: Stop containers
 sudo docker compose down

@@ -15,7 +15,7 @@ Install `openssl1.1-compat` package in the Docker image.
 Rebuild the backend container:
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/UniversoteBook
 
 # Rebuild backend with OpenSSL fix
 sudo docker compose build backend

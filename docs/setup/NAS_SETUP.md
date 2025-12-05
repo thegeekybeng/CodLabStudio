@@ -20,13 +20,13 @@ Since you don't have npm on your NAS, Docker will handle all dependency installa
 Transfer the entire project directory to your NAS. For example:
 ```bash
 # From your local machine
-scp -r /Users/ymca/_dev_work_/Projects/UniversoteBook user@your-nas:/volume2/docker/
+scp -r /path/to/CodLabStudio user@your-nas:/path/to/docker/
 ```
 
 ### 2. Navigate to Project Directory
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/CodLabStudio
 ```
 
 ### 3. Create Environment File
@@ -166,7 +166,7 @@ sudo docker compose down
 
 ```bash
 # Pull latest code
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/CodLabStudio
 git pull  # if using git
 
 # Rebuild and restart

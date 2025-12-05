@@ -8,7 +8,7 @@ PostgreSQL container is marked as "unhealthy" and backend won't start.
 First, see what's actually happening:
 
 ```bash
-cd /volume2/docker/UniversoteBook
+cd /path/to/docker/UniversoteBook
 
 # Check PostgreSQL container logs
 sudo docker compose logs postgres

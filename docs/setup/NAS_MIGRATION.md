@@ -17,7 +17,7 @@ This guide helps you migrate from the old Universal Notebook setup to the new Co
 ssh your-nas-user@your-nas-ip
 
 # Navigate to the old directory
-cd /volume2/docker/UniversoteBook  # or wherever your old setup is
+cd /path/to/old/setup  # or wherever your old setup is
 
 # Stop and remove containers
 sudo docker compose down
@@ -46,13 +46,13 @@ sudo docker compose down
 ssh your-nas-user@your-nas-ip
 
 # Navigate to Docker directory
-cd /volume2/docker
+cd /path/to/docker
 
 # Clone the repository
 sudo git clone https://github.com/thegeekybeng/CodLabStudio.git
 
 # Set proper permissions
-sudo chown -R your-nas-user:your-nas-group /volume2/docker/CodLabStudio
+sudo chown -R your-nas-user:your-nas-group /path/to/docker/CodLabStudio
 ```
 
 ### Option B: Using Docker Container (if Git is not installed)
@@ -62,29 +62,29 @@ sudo chown -R your-nas-user:your-nas-group /volume2/docker/CodLabStudio
 ssh your-nas-user@your-nas-ip
 
 # Navigate to Docker directory
-cd /volume2/docker
+cd /path/to/docker
 
 # Use Docker to clone (one-time use)
-sudo docker run --rm -v /volume2/docker:/workspace -w /workspace alpine/git clone https://github.com/thegeekybeng/CodLabStudio.git
+sudo docker run --rm -v /path/to/docker:/workspace -w /workspace alpine/git clone https://github.com/thegeekybeng/CodLabStudio.git
 
 # Set proper permissions
-sudo chown -R your-nas-user:your-nas-group /volume2/docker/CodLabStudio
+sudo chown -R your-nas-user:your-nas-group /path/to/docker/CodLabStudio
 ```
 
 ### Option C: Manual Download (if Git is not available)
 
 1. Download the repository as ZIP from: https://github.com/thegeekybeng/CodLabStudio/archive/refs/heads/main.zip
-2. Extract to `/volume2/docker/CodLabStudio`
+2. Extract to `/path/to/docker/CodLabStudio`
 3. Set proper permissions:
    ```bash
-   sudo chown -R your-nas-user:your-nas-group /volume2/docker/CodLabStudio
+   sudo chown -R your-nas-user:your-nas-group /path/to/docker/CodLabStudio
    ```
 
 ## Step 3: Configure Environment Variables
 
 ```bash
 # Navigate to the new directory
-cd /volume2/docker/CodLabStudio
+cd /path/to/docker/CodLabStudio
 
 # Create .env file (copy from example if exists, or create new)
 # For NAS, you'll need to update these values:
@@ -116,14 +116,14 @@ ADMIN_PASSWORD=Admin@CodLabStudio2024!
 
 ```bash
 # Ensure database init scripts are readable
-sudo chmod -R 755 /volume2/docker/CodLabStudio/database/init
+sudo chmod -R 755 /path/to/docker/CodLabStudio/database/init
 ```
 
 ## Step 5: Start CodLabStudio
 
 ```bash
 # Navigate to the directory
-cd /volume2/docker/CodLabStudio
+cd /path/to/docker/CodLabStudio
 
 # Start services
 sudo docker compose up -d
@@ -135,15 +135,19 @@ sudo docker compose logs -f
 ## Step 6: Verify Installation
 
 1. **Check containers are running:**
+
    ```bash
    sudo docker compose ps
    ```
+
    You should see:
+
    - `codlabstudio-db` (postgres)
    - `codlabstudio-backend`
    - `codlabstudio-frontend`
 
 2. **Check backend health:**
+
    ```bash
    curl http://localhost:3001/health
    # or from your local machine:
@@ -157,10 +161,12 @@ sudo docker compose logs -f
 ## Step 7: Access CodLabStudio
 
 ### Admin Login
+
 - **Email**: `admin@codlabstudio.local`
 - **Password**: `Admin@CodLabStudio2024!` (or whatever you set in .env)
 
 ### Guest Mode
+
 - Click "Continue as Guest" on the login page
 - Accept the End User Agreement (EUA)
 - Complete the onboarding tour
@@ -168,7 +174,9 @@ sudo docker compose logs -f
 ## Troubleshooting
 
 ### Port Conflicts
+
 If ports 3000 or 3001 are already in use:
+
 ```bash
 # Check what's using the ports
 sudo netstat -tulpn | grep :3000
@@ -178,6 +186,7 @@ sudo netstat -tulpn | grep :3001
 ```
 
 ### Database Connection Issues
+
 ```bash
 # Check database container logs
 sudo docker compose logs postgres
@@ -187,16 +196,18 @@ sudo docker compose exec postgres pg_isready -U notebook_user
 ```
 
 ### Permission Issues
+
 ```bash
 # Fix permissions on database init scripts
-sudo chmod -R 755 /volume2/docker/CodLabStudio/database/init
+sudo chmod -R 755 /path/to/docker/CodLabStudio/database/init
 
 # Fix permissions on repos directory (for Git feature)
-sudo mkdir -p /volume2/docker/CodLabStudio/repos
-sudo chmod 777 /volume2/docker/CodLabStudio/repos
+sudo mkdir -p /path/to/docker/CodLabStudio/repos
+sudo chmod 777 /path/to/docker/CodLabStudio/repos
 ```
 
 ### Frontend Not Connecting to Backend
+
 - Verify `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` in `.env` match your NAS IP
 - Verify `CORS_ORIGIN` includes your NAS IP
 - Check backend logs: `sudo docker compose logs backend`
@@ -204,7 +215,7 @@ sudo chmod 777 /volume2/docker/CodLabStudio/repos
 ## Migration Checklist
 
 - [ ] Old Universal Notebook containers stopped
-- [ ] CodLabStudio repository cloned to `/volume2/docker/CodLabStudio`
+- [ ] CodLabStudio repository cloned to `/path/to/docker/CodLabStudio`
 - [ ] Environment variables configured (especially NAS IP addresses)
 - [ ] Database init permissions set correctly
 - [ ] Docker containers started successfully
@@ -226,12 +237,11 @@ If you want to remove the old Universal Notebook setup:
 
 ```bash
 # WARNING: This will delete all old data
-cd /volume2/docker/UniversoteBook  # or wherever your old setup is
+cd /path/to/old/setup  # or wherever your old setup is
 sudo docker compose down -v  # Removes volumes and data
-sudo rm -rf /volume2/docker/UniversoteBook  # Remove directory
+sudo rm -rf /path/to/old/setup  # Remove directory
 ```
 
 ---
 
 **Need Help?** Check the troubleshooting guides in `docs/troubleshooting/`
-
