@@ -1,0 +1,70 @@
+<svg width="200" height="60" viewBox="0 0 200 60" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8B5CF6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#60A5FA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#A78BFA;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Icon: Collaborative Code Brackets -->
+  <g transform="translate(5, 10)">
+    <!-- Left bracket with connection -->
+    <path d="M 8 0 L 0 0 L 0 20 L 8 20" 
+          fill="none" 
+          stroke="url(#iconGradient)" 
+          stroke-width="2.5" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"/>
+    
+    <!-- Right bracket with connection -->
+    <path d="M 12 0 L 20 0 L 20 20 L 12 20" 
+          fill="none" 
+          stroke="url(#iconGradient)" 
+          stroke-width="2.5" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"/>
+    
+    <!-- Collaboration dots (representing multiple users/collaboration) -->
+    <circle cx="10" cy="6" r="2" fill="url(#iconGradient)" opacity="0.8"/>
+    <circle cx="10" cy="10" r="2" fill="url(#iconGradient)" opacity="0.8"/>
+    <circle cx="10" cy="14" r="2" fill="url(#iconGradient)" opacity="0.8"/>
+    
+    <!-- Connection lines (collaboration theme) -->
+    <line x1="10" y1="6" x2="15" y2="8" 
+          stroke="url(#iconGradient)" 
+          stroke-width="1.5" 
+          opacity="0.6" 
+          stroke-linecap="round"/>
+    <line x1="10" y1="10" x2="15" y2="10" 
+          stroke="url(#iconGradient)" 
+          stroke-width="1.5" 
+          opacity="0.6" 
+          stroke-linecap="round"/>
+    <line x1="10" y1="14" x2="15" y2="12" 
+          stroke="url(#iconGradient)" 
+          stroke-width="1.5" 
+          opacity="0.6" 
+          stroke-linecap="round"/>
+  </g>
+  
+  <!-- Text: CodLabStudio -->
+  <text x="35" y="35" 
+        font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" 
+        font-size="20" 
+        font-weight="700" 
+        fill="url(#logoGradient)">
+    CodLab
+  </text>
+  <text x="35" y="50" 
+        font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" 
+        font-size="12" 
+        font-weight="500" 
+        fill="#6B7280">
+    Studio
+  </text>
+</svg>

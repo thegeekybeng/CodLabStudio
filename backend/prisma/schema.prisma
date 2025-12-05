@@ -1,0 +1,171 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  AUDITOR
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  TIMEOUT
+}
+
+enum DebugSessionStatus {
+  ACTIVE
+  PAUSED
+  TERMINATED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  passwordHash String @map("password_hash")
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  lastLogin DateTime? @map("last_login")
+
+  notebooks      Notebook[]
+  executions     Execution[]
+  debugSessions  DebugSession[]
+  files          File[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+model Notebook {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String
+  content   String   @db.Text
+  language  String
+  metadata  Json?    @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  executions    Execution[]
+  debugSessions DebugSession[]
+  files         File[]
+
+  @@index([userId])
+  @@index([language])
+  @@index([createdAt])
+  @@map("notebooks")
+}
+
+model Execution {
+  id            String          @id @default(uuid())
+  notebookId    String?         @map("notebook_id")
+  userId        String          @map("user_id")
+  code          String          @db.Text
+  language      String
+  status        ExecutionStatus @default(PENDING)
+  stdout        String?         @db.Text
+  stderr        String?         @db.Text
+  exitCode      Int?            @map("exit_code")
+  executionTimeMs Int?          @map("execution_time_ms")
+  resourceUsage Json?           @map("resource_usage") @default("{}")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  notebook Notebook? @relation(fields: [notebookId], references: [id], onDelete: SetNull)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([notebookId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("executions")
+}
+
+model DebugSession {
+  id          String            @id @default(uuid())
+  notebookId  String            @map("notebook_id")
+  userId      String            @map("user_id")
+  breakpoints Json              @default("[]")
+  currentLine Int?              @map("current_line")
+  variables   Json              @default("{}")
+  callStack   Json              @default("[]") @map("call_stack")
+  status      DebugSessionStatus @default(ACTIVE)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  notebook Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([notebookId])
+  @@index([userId])
+  @@index([status])
+  @@map("debug_sessions")
+}
+
+model File {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  notebookId String?  @map("notebook_id")
+  filename   String
+  filepath   String
+  contentType String  @map("content_type")
+  sizeBytes  Int      @map("size_bytes")
+  content    Bytes?   @db.ByteA
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notebook Notebook? @relation(fields: [notebookId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([notebookId])
+  @@index([filepath])
+  @@map("files")
+}
+
+enum AuditActionType {
+  LOGIN
+  LOGOUT
+  CREATE_NOTEBOOK
+  UPDATE_NOTEBOOK
+  DELETE_NOTEBOOK
+  EXECUTE_CODE
+  START_DEBUG
+  STOP_DEBUG
+  UPLOAD_FILE
+  DELETE_FILE
+  UPDATE_PROFILE
+  CHANGE_PASSWORD
+}
+
+model AuditLog {
+  id          String          @id @default(uuid())
+  userId      String?         @map("user_id")
+  actionType  AuditActionType @map("action_type")
+  resourceType String?        @map("resource_type")
+  resourceId  String?         @map("resource_id")
+  details     Json?           @default("{}")
+  ipAddress   String?         @map("ip_address")
+  userAgent   String?         @map("user_agent")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([actionType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+

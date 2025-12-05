@@ -1,0 +1,24 @@
+# Cursor IDE Rules for Universal Notebook Project
+
+This file contains project-specific rules. For global development standards, see:
+- ~/.cursor/development-rules.md
+- ~/.cursor/neatness-standard.md
+- ~/.cursor/ai-assistant-rules.md
+
+## Project-Specific Rules
+
+### Code Style
+- Follow existing TypeScript/React patterns
+- Use Prisma for database operations
+- Docker-based execution environment
+
+### Documentation
+- Keep troubleshooting in docs/troubleshooting/active/
+- Archive resolved issues to docs/troubleshooting/archived/
+- Co-locate scripts with related documentation
+
+### Verification
+- Always verify code exists before suggesting changes
+- Read files before modifying
+- Test solutions in Docker environment
+
