@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { createServer } from 'http';
@@ -29,13 +29,13 @@ seed().catch((error) => {
 const app = express();
 const httpServer = createServer(app);
 // Socket.IO CORS - allow multiple origins
-const socketOrigins = process.env.CORS_ORIGIN 
+const socketOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
   : ['http://localhost:3000'];
 
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.NODE_ENV === 'development' 
+    origin: process.env.NODE_ENV === 'development'
       ? true  // Allow all origins in development
       : socketOrigins,
     methods: ['GET', 'POST'],
@@ -51,7 +51,7 @@ app.use(securityHeaders);
 app.use(sanitizeInput);
 app.use(validateRequestSize(10 * 1024 * 1024)); // 10MB max
 // CORS configuration - allow multiple origins for development
-const allowedOrigins = process.env.CORS_ORIGIN 
+const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
   : ['http://localhost:3000'];
 
@@ -59,11 +59,18 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+
+    // Allow strictly defined origins, OR any localhost/127.0.0.1 for better DX
+    if (
+      allowedOrigins.includes(origin) ||
+      process.env.NODE_ENV === 'development' ||
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1')
+    ) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      console.error(`[CORS] Blocked request from origin: ${origin}`);
+      callback(new Error(`Not allowed by CORS: ${origin}`));
     }
   },
   credentials: true,
@@ -81,7 +88,7 @@ app.use(guestSessionMiddleware);
 app.use(rateLimiter);
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 

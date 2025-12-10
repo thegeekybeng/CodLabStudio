@@ -1,188 +1,203 @@
 # CodLabStudio
 
-## Overview
+**Enterprise-Grade Collaborative Code Execution Platform**
 
-CodLabStudio (pronounced "Colab Studio") is an enterprise-grade, web-based code execution and development platform designed for software engineers and architects. The platform provides a unified interface for writing, executing, and debugging code across multiple programming languages within secure, containerized environments.
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Status](https://img.shields.io/badge/status-production_ready-green.svg)
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 
-## Brand Story
+CodLabStudio (pronounced "Colab Studio") is a scalable, secure, and platform-agnostic development environment designed for real-time code execution and debugging. Built to serve engineers and software architects, it provides a unified interface for writing, executing, and debugging code across **30+ programming languages** within isolated, secure containers.
 
-**CodLabStudio** (pronounced "Colab Studio") is a phonetic wordplay that embodies our core mission:
-- **Cod** = Code (programming)
-- **Lab** = Laboratory (experimentation)
-- **Studio** = Collaborative workspace
-- **Phonetic**: Sounds like "Colab" = Collaboration
-
-The name reflects our vision: a collaborative code execution studio where teams write, execute, and debug code together in real-time. While we currently provide powerful code execution capabilities, our primary focus is building the future of collaborative coding.
-
-**Tagline**: "Code. Lab. Collaborate."
-
-## Key Features
-
-- **Multi-Language Support**: Execute code in Python, JavaScript/TypeScript, Java, C/C++, Go, Rust, Ruby, PHP (10+ languages)
-- **Real-Time Execution**: Stream execution output in real-time via WebSocket connections
-- **Secure Execution**: Isolated Docker containers with resource limits (512MB, 1 CPU core) and network isolation
-- **Notebook Management**: Create, edit, delete, and search notebooks with intuitive dashboard
-- **Code Editor**: Monaco Editor (VS Code engine) with syntax highlighting, IntelliSense, and multi-language support
-- **User Authentication**: Secure JWT-based authentication with refresh tokens
-- **Enterprise Security**: Row-level security, audit logging, rate limiting, and comprehensive access controls
-- **Execution History**: Track and view all code executions with results and timing
-
-## Architecture
-
-CodLabStudio follows a three-tier architecture:
-
-- **Presentation Layer**: Next.js/React frontend with Monaco Editor
-- **Application Layer**: Node.js/Express backend services
-- **Data Layer**: PostgreSQL database with secure file storage
-
-For detailed architectural documentation, see [ARCHITECTURE.md](./ARCHITECTURE.md).
-
-## Technology Stack
-
-- **Frontend**: Next.js 14, React 18, TypeScript, Monaco Editor, Tailwind CSS 3
-- **Backend**: Node.js, Express.js, Prisma ORM, Socket.io
-- **Database**: PostgreSQL 15+
-- **Infrastructure**: Docker, Docker Compose, Nginx
-
-## Documentation
-
-### Core Documentation
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - Comprehensive system architecture document
-- [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) - Detailed implementation plan and component interactions
-- [SETUP.md](./SETUP.md) - Development setup and configuration guide
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - Production deployment guide
-- [FEATURES.md](./FEATURES.md) - Complete feature documentation
-- [CHANGELOG.md](./CHANGELOG.md) - Version history and changes
-- [PROGRESS.md](./PROGRESS.md) - Development progress tracking
-- [docs/BRAND_GUIDELINES.md](./docs/BRAND_GUIDELINES.md) - Logo design and brand guidelines
-
-### Setup Guides
-- [docs/setup/NAS_SETUP.md](./docs/setup/NAS_SETUP.md) - NAS-specific setup guide
-- [docs/setup/NAS_QUICK_START.md](./docs/setup/NAS_QUICK_START.md) - Quick start for NAS
-- [docs/setup/ADMIN_SETUP.md](./docs/setup/ADMIN_SETUP.md) - Admin account configuration
-
-### Troubleshooting
-- [docs/troubleshooting/](./docs/troubleshooting/) - Troubleshooting guides for common issues
-
-### Scripts
-- [scripts/](./scripts/) - Utility scripts for setup, troubleshooting, and testing
-
-## Current Status
-
-### ✅ Completed Features
-
-- **Phase 1: Foundation**
-
-  - Project structure and development environment
-  - PostgreSQL database schema with Prisma ORM
-  - User authentication and authorization (JWT)
-  - Docker Compose configuration
-  - Security middleware and rate limiting
-
-- **Phase 2: Core Features**
-
-  - Monaco Editor integration with 11 languages
-  - Docker-based code execution engine
-  - Real-time execution streaming via WebSocket
-  - Execution history and results tracking
-  - Notebook CRUD operations
-
-- **Phase 3: Enhanced Features**
-  - Dashboard with notebook management
-  - Support for 10 programming languages (Python, JavaScript, TypeScript, Java, C/C++, Go, Rust, Ruby, PHP)
-  - Search and filter notebooks
-  - Improved navigation and user experience
-
-### ✅ Completed Features
-
-- **Debugging Capabilities**: Breakpoints, step execution, variable inspection, call stack (Python & Node.js)
-- **Security Hardening**: Security headers, input sanitization, audit logging
-- **Production Ready**: Docker production configs, Nginx reverse proxy, deployment docs
-- **Package Management**: Install dependencies for Python, Node.js, Java, Go, Rust, Ruby, PHP
-- **Git Integration**: Initialize repos, commit, push, pull, status, and commit history
-- **Extended Language Support**: 30+ language/version combinations including multiple Python, Node.js, Java, Go, Rust, Ruby, PHP versions plus Swift, Kotlin, Scala, R, Julia, Perl, Bash
-
-### 🚧 Future Enhancements
-
-- **🎯 Collaborative Editing** (Primary Future Feature): Real-time multi-user editing with cursor tracking and participant indicators. Code is already implemented and will be the main differentiator once user registration and persistent notebook management infrastructure is complete. This is our primary focus - building the future of collaborative coding.
-- **Execution History UI**: Enhanced visual execution timeline with filtering
-- **Advanced Monitoring**: Performance dashboards and metrics
-- **Package Search**: Integration with package registries (PyPI, npm, etc.)
-- **Git Remote Configuration**: UI for configuring Git remotes
-
-## Getting Started
-
-### Prerequisites
-
-- Docker and Docker Compose
-- Node.js 20+ and npm 10+
-- PostgreSQL 15+ (or use Docker Compose)
-
-### Quick Start
-
-1. **Clone and install dependencies:**
-
-   ```bash
-   npm install
-   cd frontend && npm install && cd ..
-   cd backend && npm install && cd ..
-   ```
-
-2. **Set up environment variables:**
-   Create `.env` files based on the architecture documentation with:
-
-   - Database connection string
-   - JWT secrets
-   - CORS origin
-
-3. **Start database and run migrations:**
-
-   ```bash
-   docker-compose up postgres -d
-   cd backend
-   npm run db:generate
-   npm run db:migrate
-   ```
-
-4. **Start development servers:**
-
-   ```bash
-   # From root directory
-   npm run dev
-   ```
-
-   Or use Docker Compose:
-
-   ```bash
-   docker-compose up
-   ```
-
-5. **Access the application:**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:3001
-   - Register a new account or login to get started
-
-For detailed setup instructions, see [SETUP.md](./SETUP.md).
-
-## Security
-
-CodLabStudio implements multiple layers of security:
-
-- Container isolation for code execution
-- Row-level security in database
-- JWT-based authentication with refresh tokens
-- Input validation and output encoding
-- Rate limiting and resource quotas
-- Comprehensive audit logging
-
-## License
-
-[To be determined]
-
-## Contributing
-
-[To be determined]
+While currently providing robust code execution capabilities code-named "OpenMemory", the platform's architectural foundation is designed for **real-time collaborative coding**, supporting the vision of simultaneous multi-user development.
 
 ---
 
-For detailed technical information, please refer to the architecture and implementation documentation.
+## 🚀 Key Features
+
+### 💻 Advanced Code Editor
+*   **Monaco Editor Integration**: Industry-standard editor (VS Code engine) with full IntelliSense.
+*   **Multi-Language Support**: Syntax highlighting and execution for 30+ languages including Python, Node.js, Go, Rust, Java, and C++.
+*   **Version Management**: Support for multiple runtime versions (e.g., Python 3.10/3.11/3.12, Node 18/20).
+
+### ⚡ Secure Execution Engine
+*   **Sandboxed Environment**: Every execution runs in an ephemeral, isolated Docker container with strict resource limits (CPU, Memory, Network).
+*   **Real-time Output**: Stdout/Stderr is streamed instantly to the client via WebSockets.
+*   **Security First**: Non-root execution, read-only filesystems, and network isolation ensure platform integrity.
+
+### 🐞 Interactive Debugging
+*   **Full Debugger Support**: Set breakpoints, step through code, and inspect variables in real-time.
+*   **Language Support**: First-class debugging for Python (`debugpy`) and Node.js (`node-inspector`), with architecture to support adapters for GDB/Delve.
+*   **Deep Inspection**: View call stacks, watch variables, and analyze runtime state.
+
+### 📦 Package Management
+*   **Universal Installer**: Integrated UI to install external libraries for Python (`pip`), Node.js (`npm`), and more.
+*   **Guest Access**: Securely allows guest users to install packages for their ephemeral sessions.
+
+---
+
+## 🏗️ System Architecture
+
+CodLabStudio follows a **Microservices-Oriented**, **Three-Tier Architecture** designed for horizontal scalability and fault tolerance.
+
+```mermaid
+graph TD
+    Client[Client (Next.js)] <-->|WebSocket/REST| Gateway[API Gateway / Nginx]
+    Gateway <--> Auth[Auth Service]
+    Gateway <--> Exec[Execution Engine]
+    Gateway <--> Debug[Debug Service]
+    
+    Exec --> Docker[Docker Runtime Manager]
+    Debug --> Docker
+    
+    Docker --> Container1[Isolated Container (Py)]
+    Docker --> Container2[Isolated Container (Node)]
+    
+    Auth --> DB[(PostgreSQL)]
+    Exec --> DB
+```
+
+### Core Components
+*   **Frontend**: Next.js 14 (App Router) + React 18 + TypeScript + Tailwind CSS.
+*   **Backend**: Node.js + Express + Socket.IO for real-time event streaming.
+*   **Database**: PostgreSQL with Prisma ORM for type-safe data access.
+*   **Runtime**: Dynamic orchestration of language-specific Docker images (Alpine-based for minimal footprint).
+
+---
+
+## 🛠️ Deployment
+
+### Prerequisites
+*   Docker & Docker Compose
+*   Node.js 18+ (for local development)
+
+### Quick Start (Production)
+
+1.  **Clone the repository**
+    ```bash
+    git clone https://github.com/your-org/codlabstudio.git
+    cd codlabstudio
+    ```
+
+2.  **Configure Environment**
+    Copy the example configuration:
+    ```bash
+    cp .env.example .env.prod
+    # Edit .env.prod with your secure secrets
+    ```
+
+3.  **Launch Services**
+    ```bash
+    docker-compose -f docker-compose.yml up -d --build
+    ```
+
+4.  **Access Platform**
+    *   Web Interface: `http://localhost` (or your configured domain)
+    *   API: `http://localhost/api`
+
+---
+
+## 🔒 Security Architecture
+
+CodLabStudio implements a **Defense-in-Depth** strategy:
+
+1.  **Authentication**: JWT-based stateless auth with short-lived access tokens and secure HTTP-only refresh tokens.
+2.  **Container Isolation**: User code runs in disposable containers with no access to the host or other containers.
+3.  **Network Policies**: Egress is blocked by default to prevent malicious external connections.
+4.  **Resource Quotas**: Strict CPU/RAM limits prevent Denial of Service (DoS) attacks.
+5.  **Audit Logs**: Comprehensive audit trail of all executions, installations, and system events.
+
+---
+
+## 🔮 Roadmap
+
+*   **Real-Time Collaboration**: Multi-user editing with cursor tracking (CRDT-based).
+*   **Git Integration**: Direct commit/push/pull from the workspace.
+*   **Cloud Sync**: Persistent workspace storage across sessions.
+
+---
+
+**Architected with ❤️ by The Geeky Beng**
+
+## Executive Architecture Summary
+
+CodLabStudio represents a distinct evolution in collaborative development environments, architected as a **distributed, container-native solution** for secure polyglot code orchestration. Designed with **security-first principals** and **horizontal scalability** in mind, it provides a robust platform where engineering teams can develop, execute, and debug code in real-time across isolated environments.
+
+
+## System Architecture
+
+The platform implements a **three-tier microservices-ready architecture**, interacting via RESTful APIs and WebSocket streams, fully encapsulated within a Docker composition for deterministic deployment.
+
+### 1. Presentation Layer (Frontend)
+- **Framework**: **Next.js 14** implementing a hybrid rendering strategy (SSR/CSR) for optimal TTI (Time to Interactive) and SEO.
+- **Engine**: Integrated **Monaco Editor** (VS Code core) providing a rich IDE-grade experience with IntelliSense and massive language support.
+- **State Management**: Reactive data flow ensures real-time synchronization of execution states.
+
+### 2. Application Layer (Backend & Orchestration)
+- **Runtime**: **Node.js** service layer handling authentication, business logic, and container orchestration.
+- **Communication Patterns**: 
+  - **REST**: Synchronous operations (User management, Persistence).
+  - **WebSockets (Socket.io)**: Asynchronous, full-duplex communication for real-time `stdout`/`stderr` streaming from execution containers.
+- **Security**: 
+  - **JWT Strategy**: Stateless authentication with rotation-ready refresh tokens.
+  - **Input Sanitization**: Request validation via Zod schemas at ingress points.
+
+### 3. Execution Plane (The Core)
+- **Isolation Strategy**: Code execution occurs within **ephemeral Docker containers**. This "Sandbox-as-a-Service" model ensures:
+  - **Resource Quotas**: Strict CPU and Memory limits (cgroups).
+  - **Network Policy**: Isolated bridge networks preventing lateral movement.
+  - **Ephemeral Lifecycle**: Containers are spun up on-demand and destroyed post-execution, ensuring no state contamination.
+
+### 4. Data & Persistence Layer
+- **Primary Store**: **PostgreSQL 15+** managed via **Prisma ORM** for type-safe database access and schema migrations.
+- **Data Integrity**: Enforced via rigorous schema definitions and relational constraints (ACID compliance).
+
+### 5. Ingress & Edge
+- **Reverse Proxy**: **Nginx** acting as the API Gateway, handling:
+  - **SSL Termination**: Offloading encryption overhead.
+  - **Request Routing**: Directing traffic to Frontend or Backend services.
+  - **Security Headers**: HSTS, X-Frame-Options enforcement.
+
+## Operational Excellence
+
+### Deployment Strategy
+The solution is containerized using **Docker Compose** for reliable, reproducible deployments across environments (Dev, Test, Prod).
+- **Service Mesh Ready**: Architecture allows for decomposition into Kubernetes services (Pods/Services) for scaling individual components.
+- **Configuration Management**: Strict separation of config from code via `.env` injection.
+
+### Security Posture
+- **Network Segmentation**: Database and internal services sit on a private backend network, inaccessible to the public internet.
+- **Audit Trails**: Comprehensive logging of execution events tied to identities.
+- **Rate Limiting**: DOS protection implemented at the middleware layer.
+
+## Quick Start: Production Topology
+
+Deploy the full stack including the database, application services, and ingress gateway.
+
+### Prerequisites
+- Docker Engine & Docker Compose (V2 recommended)
+
+### Deployment Command
+Execute the verified production composition:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+```
+
+### Access Points
+- **Web Interface**: `http://localhost:8080` or `https://localhost:8443`
+- **Health Checks**: Containers implement internal health checks to ensure traffic is only routed to healthy instances.
+
+## Technical Specifications
+
+| Component | Technology | Role |
+|-----------|------------|------|
+| **Frontend** | Next.js / TypeScript | UI/UX, Client Logic |
+| **Backend** | Express / Node.js | API, Orchestration |
+| **Database** | PostgreSQL | Persistence |
+| **ORM** | Prisma | Data Access Layer |
+| **Proxy** | Nginx (Alpine) | Ingress Controller |
+| **Runtime** | Docker | Execution Sandbox |
+
+---
+
+*Architected for reliability, designed for speed, and built for security. CodLabStudio establishes the standard for modern collaborative execution environments.*

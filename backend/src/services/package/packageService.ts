@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client';
-import { dockerService } from '../docker/dockerService';
+import { dockerService, ContainerConfig } from '../docker/dockerService';
 import { AppError } from '../../middleware/errorHandler';
+import { emitToUser } from '../notification/socket';
+import { io } from '../../index';
 
 const prisma = new PrismaClient();
 
@@ -16,6 +18,8 @@ export interface PackageInfo {
   version?: string;
   description?: string;
 }
+
+export type PackageSearchResult = PackageInfo;
 
 const PACKAGE_MANAGERS: Record<string, { command: string; installCmd: string }> = {
   python: {
@@ -70,7 +74,7 @@ const PACKAGE_MANAGERS: Record<string, { command: string; installCmd: string }> 
 
 export class PackageService {
   async installPackages(input: InstallPackageInput): Promise<{ success: boolean; output: string }> {
-    const { language, packages, userId, notebookId } = input;
+    const { language, packages, userId } = input;
 
     const normalizedLanguage = language.toLowerCase();
     const packageManager = PACKAGE_MANAGERS[normalizedLanguage];
@@ -86,21 +90,30 @@ export class PackageService {
     try {
       // Create a temporary container to install packages
       const image = this.getLanguageImage(normalizedLanguage);
-      const container = await dockerService.createContainer({
+      const containerConfig: ContainerConfig = {
         image,
         cmd: ['sh', '-c', 'sleep infinity'],
+        env: [],
         workingDir: '/tmp',
-        memory: 1024 * 1024 * 1024, // 1GB for package installation
         networkDisabled: false, // Need network for package downloads
-        readonlyRootfs: false,
-      });
+        binds: ['codlabstudio_codlabstudio_packages:/python/site-packages'],
+      };
 
+      const container = await dockerService.createContainer(containerConfig);
+
+      // Start container
       await container.start();
 
-      // Install packages
-      const installCommand = `${packageManager.installCmd} ${packages.join(' ')}`;
+      emitToUser(io, userId, 'package:install', {
+        status: 'INSTALLING',
+        message: 'Installing packages...',
+        packages,
+      });
+
+      // Install packages using pip with target directory
+      const pipCmd = `pip install --target /python/site-packages ${packages.join(' ')}`;
       const exec = await container.exec({
-        Cmd: ['sh', '-c', installCommand],
+        Cmd: ['sh', '-c', pipCmd],
         AttachStdout: true,
         AttachStderr: true,
       });
@@ -135,9 +148,10 @@ export class PackageService {
       await dockerService.stopContainer(container);
 
       // Log package installation
+      const isGuest = userId.startsWith('guest_');
       await prisma.auditLog.create({
         data: {
-          userId,
+          userId: isGuest ? null : userId, // Pass null for guest users
           actionType: 'UPLOAD_FILE', // Reuse action type
           resourceType: 'package',
           details: {
@@ -161,7 +175,10 @@ export class PackageService {
     }
   }
 
-  async searchPackage(language: string, query: string): Promise<PackageInfo[]> {
+  async searchPackage(
+    language: string,
+    _notebookId?: string
+  ): Promise<PackageSearchResult[]> {
     const normalizedLanguage = language.toLowerCase();
     const packageManager = PACKAGE_MANAGERS[normalizedLanguage];
 

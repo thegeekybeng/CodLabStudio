@@ -54,14 +54,18 @@ export function clearGuestSession(): void {
  * Returns null if not in guest mode
  */
 export function getGuestSessionHeader(): { 'x-guest-session-id'?: string } {
-  const isGuestMode = localStorage.getItem('guestMode') === 'true';
-  if (!isGuestMode) {
+  // Always attach guest session if it exists, regardless of explicit 'guestMode' flag
+  // This ensures API calls match the socket connection which uses the stored ID
+  let sessionId = getGuestSessionId();
+
+  if (!sessionId) {
     return {};
   }
-
-  let sessionId = getGuestSessionId();
   if (!sessionId) {
-    sessionId = createGuestSession();
+    // Generate local ID synchronously for headers
+    // The formal creation/sync with backend should happen elsewhere or lazily
+    sessionId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    localStorage.setItem(GUEST_SESSION_KEY, sessionId);
   }
 
   return {

@@ -91,10 +91,7 @@ export default function CodeEditor({
       wordBasedSuggestions: "matchingDocuments",
       // Show errors and warnings
       renderValidationDecorations: "on",
-      // Enable semantic highlighting for better error visibility
-      semanticHighlighting: {
-        enabled: true,
-      },
+
       // Enable find widget (Ctrl+F / Cmd+F)
       find: {
         addExtraSpaceOnTop: false,

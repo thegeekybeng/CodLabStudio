@@ -15,6 +15,7 @@ export interface ContainerConfig {
   cpuQuota?: number;
   networkDisabled?: boolean;
   readonlyRootfs?: boolean;
+  binds?: string[];
 }
 
 export interface ExecutionResult {
@@ -34,6 +35,13 @@ export class DockerService {
 
   async createContainer(config: ContainerConfig): Promise<Docker.Container> {
     try {
+      // Check if image exists, pull if not
+      const imageExists = await this.imageExists(config.image);
+      if (!imageExists) {
+        console.log(`Image ${config.image} not found, pulling...`);
+        await this.pullImage(config.image);
+      }
+
       const containerConfig: Docker.ContainerCreateOptions = {
         Image: config.image,
         Cmd: config.cmd || ['sh', '-c', 'sleep infinity'],
@@ -46,6 +54,7 @@ export class DockerService {
           NetworkMode: config.networkDisabled ? 'none' : 'bridge',
           ReadonlyRootfs: config.readonlyRootfs || false,
           AutoRemove: true, // Auto-remove container when it stops
+          Binds: config.binds || [],
         },
         AttachStdout: true,
         AttachStderr: true,
@@ -63,7 +72,8 @@ export class DockerService {
   async executeCode(
     container: Docker.Container,
     code: string,
-    language: string
+    language: string,
+    onProgress?: (type: 'stdout' | 'stderr', data: string) => void
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
 
@@ -73,7 +83,7 @@ export class DockerService {
 
       // Create a script that writes code and executes it
       const executeScript = this.createExecuteScript(language, code);
-      
+
       // Execute the script
       const exec = await container.exec({
         Cmd: ['sh', '-c', executeScript],
@@ -83,7 +93,7 @@ export class DockerService {
       });
 
       const stream = await exec.start({ hijack: true, stdin: false });
-      
+
       let stdout = '';
       let stderr = '';
       let exitCode = 0;
@@ -101,11 +111,15 @@ export class DockerService {
       await new Promise<void>((resolve, reject) => {
         container.modem.demuxStream(stream, {
           write: (chunk: Buffer) => {
-            stdout += chunk.toString();
+            const data = chunk.toString();
+            stdout += data;
+            if (onProgress) onProgress('stdout', data);
           },
         }, {
           write: (chunk: Buffer) => {
-            stderr += chunk.toString();
+            const data = chunk.toString();
+            stderr += data;
+            if (onProgress) onProgress('stderr', data);
           },
         });
 
@@ -135,9 +149,9 @@ export class DockerService {
         executionTime,
       };
     } catch (error) {
-      const executionTime = Date.now() - startTime;
+      // executionTime not used here but could be logged
       console.error('Error executing code:', error);
-      
+
       // Try to stop container
       try {
         await container.stop({ t: 0 });
@@ -164,7 +178,7 @@ export class DockerService {
   private createExecuteScript(language: string, code: string): string {
     // Escape code for shell
     const escapedCode = code.replace(/'/g, "'\\''");
-    
+
     switch (language.toLowerCase()) {
       case 'python':
       case 'py':
@@ -232,7 +246,7 @@ export class DockerService {
 
   async pullImage(image: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      docker.pull(image, (err, stream) => {
+      docker.pull(image, (err: any, stream: any) => {
         if (err) {
           reject(err);
           return;

@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { AuthRequest } from '../middleware/auth';
 import { guestSessionMiddleware, GuestRequest } from '../middleware/guestSession';
 import { AppError } from '../middleware/errorHandler';
 import { sessionZipService } from '../services/session/sessionZipService';

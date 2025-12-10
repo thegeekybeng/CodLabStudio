@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AppError } from './errorHandler';
 
 // Security headers middleware
-export const securityHeaders = (req: Request, res: Response, next: NextFunction): void => {
+export const securityHeaders = (_req: Request, res: Response, next: NextFunction): void => {
   // HSTS
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -30,7 +30,7 @@ export const securityHeaders = (req: Request, res: Response, next: NextFunction)
 };
 
 // Input sanitization middleware
-export const sanitizeInput = (req: Request, res: Response, next: NextFunction): void => {
+export const sanitizeInput = (req: Request, _res: Response, next: NextFunction): void => {
   // Basic XSS prevention - remove script tags
   const sanitize = (obj: any): any => {
     if (typeof obj === 'string') {
@@ -64,9 +64,9 @@ export const sanitizeInput = (req: Request, res: Response, next: NextFunction): 
 
 // Request size validation
 export const validateRequestSize = (maxSize: number = 10 * 1024 * 1024) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return (req: Request, _res: Response, next: NextFunction): void => {
     const contentLength = parseInt(req.headers['content-length'] || '0', 10);
-    
+
     if (contentLength > maxSize) {
       throw new AppError(`Request body too large. Maximum size: ${maxSize / 1024 / 1024}MB`, 413);
     }

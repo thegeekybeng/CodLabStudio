@@ -98,11 +98,17 @@ export class DebugService {
       await dockerService.pullImage(image);
     }
 
+    // Determine auth type
+    const isGuest = userId.startsWith('guest_');
+    const dbUserId = isGuest ? undefined : userId;
+    const dbGuestId = isGuest ? userId.replace('guest_', '') : undefined;
+
     // Create debug session record
     const session = await prisma.debugSession.create({
       data: {
-        notebookId: notebookId || null,
-        userId,
+        notebookId: notebookId || undefined,
+        userId: dbUserId,
+        guestId: dbGuestId,
         breakpoints: breakpoints as any,
         status: DebugSessionStatus.ACTIVE,
         variables: {},
@@ -156,6 +162,31 @@ export class DebugService {
         status: 'active',
       });
 
+      // Stream logs
+      const stream = await container.attach({
+        stream: true,
+        stdout: true,
+        stderr: true,
+      });
+
+      container.modem.demuxStream(stream, {
+        write: (chunk: Buffer) => {
+          emitToUser(io, userId, 'debug:output', {
+            sessionId,
+            type: 'stdout',
+            content: chunk.toString(),
+          });
+        },
+      }, {
+        write: (chunk: Buffer) => {
+          emitToUser(io, userId, 'debug:output', {
+            sessionId,
+            type: 'stderr',
+            content: chunk.toString(),
+          });
+        },
+      });
+
       // Write code with breakpoints
       await this.setupDebugCode(container, code, language, breakpoints);
 
@@ -190,9 +221,17 @@ export class DebugService {
       throw new AppError('Debug session not found or inactive', 404);
     }
 
-    // Verify user owns the session
+    // Verify ownership
+    const isGuest = userId.startsWith('guest_');
+    const dbUserId = isGuest ? undefined : userId;
+    const dbGuestId = isGuest ? userId.replace('guest_', '') : undefined;
+
     const dbSession = await prisma.debugSession.findFirst({
-      where: { id: sessionId, userId },
+      where: {
+        id: sessionId,
+        userId: dbUserId,
+        guestId: dbGuestId
+      },
     });
 
     if (!dbSession) {
@@ -237,8 +276,17 @@ export class DebugService {
     }
 
     // Verify ownership
+    // Verify ownership
+    const isGuest = userId.startsWith('guest_');
+    const dbUserId = isGuest ? undefined : userId;
+    const dbGuestId = isGuest ? userId.replace('guest_', '') : undefined;
+
     const dbSession = await prisma.debugSession.findFirst({
-      where: { id: sessionId, userId },
+      where: {
+        id: sessionId,
+        userId: dbUserId,
+        guestId: dbGuestId
+      },
     });
 
     if (!dbSession) {
@@ -271,10 +319,15 @@ export class DebugService {
   }
 
   async getDebugSession(sessionId: string, userId: string) {
+    const isGuest = userId.startsWith('guest_');
+    const dbUserId = isGuest ? undefined : userId;
+    const dbGuestId = isGuest ? userId.replace('guest_', '') : undefined;
+
     const session = await prisma.debugSession.findFirst({
       where: {
         id: sessionId,
-        userId,
+        userId: dbUserId,
+        guestId: dbGuestId
       },
     });
 
@@ -288,13 +341,13 @@ export class DebugService {
   private async setupDebugCode(
     container: any,
     code: string,
-    language: string,
-    breakpoints: number[]
+    _language: string,
+    _breakpoints: number[]
   ): Promise<void> {
     // This would write code with debugger configuration
     // Implementation depends on specific debugger protocol
     const exec = await container.exec({
-      Cmd: ['sh', '-c', `echo '${code.replace(/'/g, "'\\''")}' > /tmp/code.py`],
+      Cmd: ['sh', '-c', `echo '${code.replace(/'/g, "'\\''")}' > /tmp/user_script.py`],
       AttachStdout: true,
       AttachStderr: true,
     });
@@ -302,7 +355,7 @@ export class DebugService {
     await exec.start({});
   }
 
-  private async handleDebugCommand(session: any, command: DebugCommand): Promise<any> {
+  private async handleDebugCommand(_session: any, _command: DebugCommand): Promise<any> {
     // Simplified implementation - would integrate with actual debugger protocols
     // (DAP for Python, CDP for Node.js)
     return {
@@ -316,7 +369,7 @@ export class DebugService {
     switch (language) {
       case 'python':
       case 'py':
-        return ['sh', '-c', 'python3 -m debugpy --listen 0.0.0.0:5678 --wait-for-client /tmp/code.py'];
+        return ['sh', '-c', 'pip install debugpy && python3 -m debugpy --listen 0.0.0.0:5678 --wait-for-client /tmp/user_script.py'];
       case 'javascript':
       case 'js':
       case 'node':

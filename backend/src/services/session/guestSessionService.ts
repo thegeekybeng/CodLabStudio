@@ -17,8 +17,8 @@ export class GuestSessionService {
   /**
    * Create a new guest session
    */
-  createSession(ipAddress?: string, userAgent?: string): string {
-    const sessionId = `guest_${uuidv4()}`;
+  createSession(ipAddress?: string, userAgent?: string, existingSessionId?: string): string {
+    const sessionId = existingSessionId || `guest_${uuidv4()}`;
     const now = new Date();
 
     const session: GuestSession = {
@@ -34,7 +34,7 @@ export class GuestSessionService {
 
     // Log session creation
     auditService.log({
-      userId: null, // Guest sessions have no userId
+      userId: undefined, // Guest sessions have no userId
       actionType: 'LOGIN' as AuditActionType, // Reuse LOGIN for session start
       resourceType: 'session',
       resourceId: sessionId,
@@ -95,7 +95,7 @@ export class GuestSessionService {
 
     // Log to audit service
     await auditService.log({
-      userId: null, // Guest sessions have no userId
+      userId: undefined, // Guest sessions have no userId
       actionType,
       resourceType,
       resourceId,
@@ -124,7 +124,7 @@ export class GuestSessionService {
 
     // Log session end
     await auditService.log({
-      userId: null,
+      userId: undefined,
       actionType: 'LOGOUT' as AuditActionType, // Reuse LOGOUT for session end
       resourceType: 'session',
       resourceId: sessionId,

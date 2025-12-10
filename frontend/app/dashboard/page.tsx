@@ -41,7 +41,7 @@ export default function DashboardPage() {
           // Use actual session ID for guest users
           const sessionId = getGuestSessionId() || "guest";
           setUser({
-            id: sessionId, // Use session ID instead of "guest"
+            id: `guest_${sessionId}`, // Prepend guest_ to match backend expectation
             email: "Guest User",
             role: "GUEST",
             createdAt: new Date().toISOString(),

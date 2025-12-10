@@ -49,7 +49,33 @@ export default function ExecutionPanel({
       setStatus(data.message || data.status);
       if (data.status === 'RUNNING') {
         setIsExecuting(true);
+        // Initialize result for streaming
+        setResult((prev) => prev || {
+          stdout: '',
+          stderr: '',
+          exitCode: null,
+          executionTime: null,
+          status: 'RUNNING'
+        });
       }
+    });
+
+    newSocket.on('execution:output', (data: any) => {
+      setResult((prev) => {
+        const current = prev || {
+          stdout: '',
+          stderr: '',
+          exitCode: null,
+          executionTime: null,
+          status: 'RUNNING'
+        };
+
+        if (data.type === 'stdout') {
+          return { ...current, stdout: current.stdout + data.data };
+        } else {
+          return { ...current, stderr: current.stderr + data.data };
+        }
+      });
     });
 
     newSocket.on('execution:complete', (data: any) => {

@@ -30,10 +30,15 @@ export const guestSessionMiddleware = (
     req.guestSessionId = sessionId;
     guestSessionService.updateActivity(sessionId);
   } else if (sessionId) {
-    // Invalid session ID - create new one
+    // Invalid session ID - create new one (or re-create if valid format)
     const ipAddress = req.ip || req.socket.remoteAddress || undefined;
     const userAgent = req.get('user-agent') || undefined;
-    const newSessionId = guestSessionService.createSession(ipAddress, userAgent);
+
+    // If the provided session ID looks valid (starts with guest_), reuse it
+    // This handles server restarts where in-memory sessions are lost but client keys persist
+    const existingId = sessionId && sessionId.startsWith('guest_') ? sessionId : undefined;
+
+    const newSessionId = guestSessionService.createSession(ipAddress, userAgent, existingId);
     req.guestSessionId = newSessionId;
     res.setHeader('X-Guest-Session-Id', newSessionId);
   }

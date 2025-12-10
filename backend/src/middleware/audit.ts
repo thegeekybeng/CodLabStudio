@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { AuditActionType } from '@prisma/client';
 import { auditService } from '../services/audit/auditService';
 import { guestSessionService } from '../services/session/guestSessionService';

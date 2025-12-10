@@ -18,39 +18,59 @@ const searchPackageSchema = z.object({
 });
 
 // Get supported languages for package management
-router.get('/languages', (req, res) => {
+router.get('/supported', async (_req, res) => {
   res.json({
     success: true,
     data: packageService.getSupportedLanguages(),
   });
 });
 
+import { guestSessionMiddleware, GuestRequest } from '../middleware/guestSession';
+
 // Install packages
-router.post('/install', authenticate, async (req: AuthRequest, res, next) => {
-  try {
-    const userId = req.userId;
-    if (!userId) {
-      throw new AppError('User ID not found', 401);
+router.post(
+  '/install',
+  // Conditional authentication
+  (req, res, next) => {
+    if (req.headers.authorization) {
+      return authenticate(req as any, res, next);
     }
+    next();
+  },
+  guestSessionMiddleware,
+  async (req: AuthRequest | GuestRequest, res, next) => {
+    try {
+      const authReq = req as AuthRequest;
+      const guestReq = req as GuestRequest;
+      let userId: string;
 
-    const validated = installPackagesSchema.parse(req.body);
-    const result = await packageService.installPackages({
-      ...validated,
-      userId,
-    });
+      if (authReq.userId) {
+        userId = authReq.userId;
+      } else if (guestReq.guestSessionId) {
+        userId = `guest_${guestReq.guestSessionId}`;
+      } else {
+        throw new AppError('User ID not found', 401);
+      }
 
-    res.json({
-      success: true,
-      data: result,
-    });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      next(new AppError('Invalid input data', 400));
-    } else {
-      next(error);
+      const validated = installPackagesSchema.parse(req.body);
+      const result = await packageService.installPackages({
+        ...validated,
+        userId,
+      });
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        next(new AppError('Invalid input data', 400));
+      } else {
+        next(error);
+      }
     }
   }
-});
+);
 
 // Search packages
 router.post('/search', authenticate, async (req: AuthRequest, res, next) => {

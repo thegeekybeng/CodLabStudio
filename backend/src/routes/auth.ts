@@ -1,16 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { authService } from '../services/auth/authService';
-import { authenticate } from '../middleware/auth';
+import { authenticate, AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { guestSessionService } from '../services/session/guestSessionService';
 
 const router = Router();
 
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(12),
-});
+
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -22,7 +19,7 @@ const refreshTokenSchema = z.object({
 });
 
 // Registration disabled - admin account is auto-created on startup
-router.post('/register', async (req, res, next) => {
+router.post('/register', async (_req, _res, next) => {
   next(new AppError('Registration is disabled. Please contact administrator.', 403));
 });
 
@@ -64,7 +61,7 @@ router.post('/refresh', async (req, res, next) => {
 
 router.get('/me', authenticate, async (req, res, next) => {
   try {
-    const userId = req.userId;
+    const userId = (req as AuthRequest).userId;
     if (!userId) {
       throw new AppError('User ID not found', 401);
     }
@@ -89,7 +86,7 @@ router.post('/guest/session', async (req, res, next) => {
   try {
     const ipAddress = req.ip || req.socket.remoteAddress || undefined;
     const userAgent = req.get('user-agent') || undefined;
-    
+
     const sessionId = guestSessionService.createSession(ipAddress, userAgent);
 
     res.json({

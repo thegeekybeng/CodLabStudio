@@ -125,7 +125,7 @@ export class AuthService {
 
   async refreshToken(refreshToken: string): Promise<AuthTokens> {
     try {
-      const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as { userId: string; role: string };
+      const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET!) as unknown as { userId: string; role: string };
 
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
@@ -148,13 +148,13 @@ export class AuthService {
     const accessToken = jwt.sign(
       { userId, role },
       JWT_SECRET!,
-      { expiresIn: JWT_EXPIRES_IN }
+      { expiresIn: JWT_EXPIRES_IN as any }
     );
 
     const refreshToken = jwt.sign(
       { userId, role },
       JWT_REFRESH_SECRET!,
-      { expiresIn: JWT_REFRESH_EXPIRES_IN }
+      { expiresIn: JWT_REFRESH_EXPIRES_IN as any }
     );
 
     return { accessToken, refreshToken };

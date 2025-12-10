@@ -17,7 +17,7 @@ const executeCodeSchema = z.object({
 });
 
 // Get supported languages
-router.get('/languages', (req, res) => {
+router.get('/languages', (_req, res) => {
   res.json({
     success: true,
     data: executionService.getSupportedLanguages(),
@@ -27,6 +27,13 @@ router.get('/languages', (req, res) => {
 // Execute code (supports both authenticated and guest sessions)
 router.post(
   '/execute',
+  // Conditional authentication
+  (req, res, next) => {
+    if (req.headers.authorization) {
+      return authenticate(req as any, res, next);
+    }
+    next();
+  },
   guestSessionMiddleware, // Allow guest sessions
   executionRateLimiter,
   async (req: AuthRequest | GuestRequest, res, next) => {
@@ -86,44 +93,79 @@ router.post(
 );
 
 // Get execution by ID
-router.get('/:id', authenticate, async (req: AuthRequest, res, next) => {
-  try {
-    const userId = req.userId;
-    const { id } = req.params;
-
-    if (!userId) {
-      throw new AppError('User ID not found', 401);
+router.get(
+  '/:id',
+  // Conditional authentication
+  (req, res, next) => {
+    if (req.headers.authorization) {
+      return authenticate(req as any, res, next);
     }
+    next();
+  },
+  guestSessionMiddleware, // Allow guest sessions
+  async (req: AuthRequest | GuestRequest, res, next) => {
+    try {
+      const authReq = req as AuthRequest;
+      const guestReq = req as GuestRequest;
+      const { id } = req.params;
+      let userId: string;
 
-    const execution = await executionService.getExecution(id, userId);
+      if (authReq.userId) {
+        userId = authReq.userId;
+      } else if (guestReq.guestSessionId) {
+        userId = `guest_${guestReq.guestSessionId}`;
+      } else {
+        throw new AppError('Session not found', 401);
+      }
 
-    res.json({
-      success: true,
-      data: execution,
-    });
-  } catch (error) {
-    next(error);
+      const execution = await executionService.getExecution(id, userId);
+
+      res.json({
+        success: true,
+        data: execution,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Get user's executions
-router.get('/', authenticate, async (req: AuthRequest, res, next) => {
-  try {
-    const userId = req.userId;
-    if (!userId) {
-      throw new AppError('User ID not found', 401);
+router.get(
+  '/',
+  // Conditional authentication
+  (req, res, next) => {
+    if (req.headers.authorization) {
+      return authenticate(req as any, res, next);
     }
+    next();
+  },
+  guestSessionMiddleware, // Allow guest sessions
+  async (req: AuthRequest | GuestRequest, res, next) => {
+    try {
+      const authReq = req as AuthRequest;
+      const guestReq = req as GuestRequest;
+      let userId: string;
 
-    const limit = parseInt(req.query.limit as string) || 50;
-    const executions = await executionService.getUserExecutions(userId, limit);
+      if (authReq.userId) {
+        userId = authReq.userId;
+      } else if (guestReq.guestSessionId) {
+        userId = `guest_${guestReq.guestSessionId}`;
+      } else {
+        throw new AppError('Session not found', 401);
+      }
 
-    res.json({
-      success: true,
-      data: executions,
-    });
-  } catch (error) {
-    next(error);
+      const limit = parseInt(req.query.limit as string) || 50;
+      const executions = await executionService.getUserExecutions(userId, limit);
+
+      res.json({
+        success: true,
+        data: executions,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 export default router;

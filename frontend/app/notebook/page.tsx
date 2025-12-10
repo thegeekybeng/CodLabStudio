@@ -49,7 +49,7 @@ export default function NotebookPage() {
         // Use actual session ID for guest users (needed for execution tracking)
         const sessionId = getGuestSessionId() || "guest";
         setUser({
-          id: sessionId, // Use session ID instead of "guest"
+          id: `guest_${sessionId}`, // Prepend guest_ to match backend expectation
           email: "Guest User",
           role: "GUEST",
         });

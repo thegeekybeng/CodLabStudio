@@ -88,13 +88,19 @@ export class ExecutionService {
       await dockerService.pullImage(image);
     }
 
+    // Determine auth type
+    const isGuest = userId.startsWith('guest_');
+    const dbUserId = isGuest ? undefined : userId;
+    const dbGuestId = isGuest ? userId.replace('guest_', '') : undefined;
+
     // Create execution record
     const execution = await prisma.execution.create({
       data: {
         code,
         language: normalizedLanguage,
         status: ExecutionStatus.PENDING,
-        userId,
+        userId: dbUserId,
+        guestId: dbGuestId,
         notebookId: notebookId || null,
       },
     });
@@ -132,20 +138,33 @@ export class ExecutionService {
       const containerConfig: ContainerConfig = {
         image,
         cmd: ['sh', '-c', 'sleep infinity'], // Keep container alive
-        env: [],
+        env: ['PYTHONPATH=/python/site-packages'],
         workingDir: '/tmp',
         memory: 512 * 1024 * 1024, // 512MB
         networkDisabled: true, // No network access for security
         readonlyRootfs: false, // Need to write code file
+        binds: ['codlabstudio_codlabstudio_packages:/python/site-packages'],
       };
 
       const container = await dockerService.createContainer(containerConfig);
 
-      // Execute code
-      const result = await dockerService.executeCode(container, code, language);
+      // Execute code with progress streaming
+      const result = await dockerService.executeCode(
+        container,
+        code,
+        language,
+        (type, data) => {
+          // Emit streaming output to user
+          emitToUser(io, userId, 'execution:output', {
+            executionId,
+            type, // 'stdout' or 'stderr'
+            data
+          });
+        }
+      );
 
       // Update execution record
-      const updatedExecution = await prisma.execution.update({
+      await prisma.execution.update({
         where: { id: executionId },
         data: {
           status: ExecutionStatus.COMPLETED,
@@ -160,11 +179,10 @@ export class ExecutionService {
       // Guest sessions have userId that starts with "guest_"
       if (userId.startsWith('guest_')) {
         const { auditService } = await import('../audit/auditService');
-        const { AuditActionType } = await import('@prisma/client');
         const sessionId = userId.replace('guest_', '');
         await auditService.log({
-          userId: null,
-          actionType: 'EXECUTE_CODE' as AuditActionType,
+          userId: undefined,
+          actionType: 'EXECUTE_CODE' as any, // Use any or proper type cast if available
           resourceType: 'execution',
           resourceId: executionId,
           details: {
@@ -213,10 +231,16 @@ export class ExecutionService {
   }
 
   async getExecution(executionId: string, userId: string) {
+    // Determine auth type for lookup
+    const isGuest = userId.startsWith('guest_');
+    const dbUserId = isGuest ? undefined : userId;
+    const dbGuestId = isGuest ? userId.replace('guest_', '') : undefined;
+
     const execution = await prisma.execution.findFirst({
       where: {
         id: executionId,
-        userId, // Ensure user owns the execution
+        userId: dbUserId,
+        guestId: dbGuestId
       },
     });
 
@@ -228,8 +252,15 @@ export class ExecutionService {
   }
 
   async getUserExecutions(userId: string, limit: number = 50) {
+    const isGuest = userId.startsWith('guest_');
+    const dbUserId = isGuest ? undefined : userId;
+    const dbGuestId = isGuest ? userId.replace('guest_', '') : undefined;
+
     return prisma.execution.findMany({
-      where: { userId },
+      where: {
+        userId: dbUserId,
+        guestId: dbGuestId
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
     });

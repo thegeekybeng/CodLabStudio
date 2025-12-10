@@ -123,7 +123,7 @@ export class GitService {
     }
   }
 
-  async getStatus(notebookId: string, userId: string): Promise<GitStatus> {
+  async getStatus(notebookId: string, _userId: string): Promise<GitStatus> {
     const repoPath = this.getRepoPath(notebookId);
 
     try {
@@ -289,7 +289,7 @@ export class GitService {
 
   async syncNotebookToRepo(notebookId: string): Promise<void> {
     const repoPath = this.getRepoPath(notebookId);
-    
+
     try {
       // Get notebook from database
       const notebook = await prisma.notebook.findUnique({

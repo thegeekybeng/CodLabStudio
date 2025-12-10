@@ -72,7 +72,8 @@ model Notebook {
 model Execution {
   id            String          @id @default(uuid())
   notebookId    String?         @map("notebook_id")
-  userId        String          @map("user_id")
+  userId        String?         @map("user_id")
+  guestId       String?         @map("guest_id")
   code          String          @db.Text
   language      String
   status        ExecutionStatus @default(PENDING)
@@ -84,10 +85,11 @@ model Execution {
   createdAt     DateTime        @default(now()) @map("created_at")
 
   notebook Notebook? @relation(fields: [notebookId], references: [id], onDelete: SetNull)
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([notebookId])
   @@index([userId])
+  @@index([guestId])
   @@index([status])
   @@index([createdAt])
   @@map("executions")
@@ -95,8 +97,9 @@ model Execution {
 
 model DebugSession {
   id          String            @id @default(uuid())
-  notebookId  String            @map("notebook_id")
-  userId      String            @map("user_id")
+  notebookId  String?           @map("notebook_id")
+  userId      String?           @map("user_id")
+  guestId     String?           @map("guest_id")
   breakpoints Json              @default("[]")
   currentLine Int?              @map("current_line")
   variables   Json              @default("{}")
@@ -105,11 +108,12 @@ model DebugSession {
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
 
-  notebook Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notebook Notebook? @relation(fields: [notebookId], references: [id], onDelete: SetNull)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([notebookId])
   @@index([userId])
+  @@index([guestId])
   @@index([status])
   @@map("debug_sessions")
 }
