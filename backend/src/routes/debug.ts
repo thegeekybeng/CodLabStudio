@@ -53,6 +53,7 @@ router.post(
       }
 
       const validated = startDebugSchema.parse(req.body);
+      console.log(`[DEBUG_ROUTE] valid body:`, validated);
       const result = await debugService.startDebugSession({
         ...validated,
         breakpoints: validated.breakpoints || [],

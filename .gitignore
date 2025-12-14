@@ -71,3 +71,9 @@ repos/
 scripts/setup/RUN_THIS_NOW.sh
 scripts/setup/APPLY_CHANGES.sh
 docs/troubleshooting/active/scripted-fixes/FINAL_FIX.sh
+
+# Local Cleanup
+*.pdf
+verify_*.ts
+verify_*.js
+test_*.js

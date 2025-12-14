@@ -6,6 +6,9 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 
+# Update npm to latest version
+RUN npm install -g npm@latest
+
 # Install dependencies (use npm install if package-lock.json doesn't exist)
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
@@ -19,7 +22,29 @@ RUN npm run db:generate
 RUN npm run build
 
 # Production stage
-FROM node:20-slim
+FROM node:20-slim AS development
+
+WORKDIR /app
+
+# Install Docker CLI and required libraries for Prisma
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    docker.io \
+    ca-certificates \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Install all dependencies including devDependencies
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+# Generate Prisma client
+RUN npm run db:generate
+
+# Production stage
+FROM node:20-slim AS production
 
 WORKDIR /app
 

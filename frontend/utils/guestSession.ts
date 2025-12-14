@@ -19,7 +19,7 @@ export function getGuestSessionId(): string | null {
 export async function createGuestSession(): Promise<string> {
   try {
     // Call backend to create session
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/auth/guest/session`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/auth/guest/session`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

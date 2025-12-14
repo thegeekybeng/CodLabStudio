@@ -7,7 +7,30 @@ export interface SessionStats {
   totalSize: number;
 }
 
+export interface CreateSessionRequest {
+  language: string;
+}
+
+export interface SessionResponse {
+  sessionId: string;
+  userId: string;
+}
+
 export const sessionApi = {
+  createSession: async (data: CreateSessionRequest): Promise<SessionResponse> => {
+    const response = await api.post('/session', data);
+    return response.data.data;
+  },
+
+  getSession: async (sessionId: string) => {
+    const response = await api.get(`/session/${sessionId}`);
+    return response.data.data;
+  },
+
+  stopSession: async (sessionId: string) => {
+    await api.delete(`/session/${sessionId}`);
+  },
+
   /**
    * Download session zip file
    */
@@ -25,5 +48,12 @@ export const sessionApi = {
     const response = await api.get('/session/stats');
     return response.data.data;
   },
-};
 
+  /**
+   * Get supported languages
+   */
+  getSupportedLanguages: async (): Promise<string[]> => {
+    const response = await api.get('/session/languages');
+    return response.data.data;
+  },
+};

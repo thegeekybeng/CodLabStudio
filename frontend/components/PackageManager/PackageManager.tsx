@@ -1,120 +1,82 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { packagesApi } from "@/lib/packages";
+import { useState } from 'react';
+import { useSessionStore } from '@/store/useSessionStore';
+import { packagesApi } from '@/lib/packages';
 
 interface PackageManagerProps {
   language: string;
   notebookId?: string;
 }
 
-export default function PackageManager({
-  language,
-  notebookId,
-}: PackageManagerProps) {
-  const [packages, setPackages] = useState<string>("");
-  const [installing, setInstalling] = useState(false);
-  const [output, setOutput] = useState<string>("");
-  const [installedPackages, setInstalledPackages] = useState<any[]>([]);
+export default function PackageManager({ language }: PackageManagerProps) {
+  const { sessionId, addOutput } = useSessionStore();
+  const [pkgName, setPkgName] = useState('');
+  const [isInstalling, setIsInstalling] = useState(false);
 
   const handleInstall = async () => {
-    if (!packages.trim()) {
-      alert("Please enter package names");
-      return;
+    if (!sessionId) {
+        addOutput('[System] No active session.');
+        return;
     }
+    if (!pkgName.trim()) return;
 
-    setInstalling(true);
-    setOutput("");
+    setIsInstalling(true);
+    addOutput(`[System] Installing package: ${pkgName}...`);
 
     try {
-      const packageList = packages
-        .split(",")
-        .map((p) => p.trim())
-        .filter(Boolean);
-
       const result = await packagesApi.install({
-        language,
-        packages: packageList,
-        notebookId,
+        sessionId,
+        packages: [pkgName],
+        language
       });
-
-      setOutput(result.output);
+      
       if (result.success) {
-        setPackages("");
-        // Refresh installed packages list
-        try {
-          const installed = await packagesApi.listInstalled(language);
-          setInstalledPackages(installed);
-        } catch (error) {
-          console.error("Failed to list installed packages:", error);
-        }
+         addOutput(`[System] Successfully installed ${pkgName}`);
+         addOutput(result.output);
+         setPkgName('');
+      } else {
+         addOutput(`[Error] Failed to install ${pkgName}`);
+         addOutput(result.output);
       }
     } catch (error: any) {
-      setOutput(
-        error.response?.data?.error?.message || "Failed to install packages"
-      );
+      addOutput(`[Error] Installation error: ${error.message}`);
     } finally {
-      setInstalling(false);
+      setIsInstalling(false);
     }
   };
 
   return (
-    <div className="w-full space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Install Packages (comma-separated)
-        </label>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={packages}
-            onChange={(e) => setPackages(e.target.value)}
-            placeholder="e.g., numpy, pandas, matplotlib"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-            disabled={installing}
-          />
-          <button
+    <div className="p-4">
+      <h3 className="text-sm font-semibold text-gray-700 mb-4">Package Manager ({language})</h3>
+      
+      <div className="flex gap-2 mb-4">
+        <input 
+            value={pkgName}
+            onChange={(e) => setPkgName(e.target.value)}
+            placeholder="Package name (e.g. requests)"
+            className="flex-1 border rounded px-3 py-2 text-sm"
+            disabled={isInstalling || !sessionId}
+            onKeyDown={(e) => e.key === 'Enter' && handleInstall()}
+        />
+        <button 
             onClick={handleInstall}
-            disabled={installing || !packages.trim()}
-            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          >
-            {installing ? "Installing..." : "Install"}
-          </button>
-        </div>
-        <p className="text-xs text-gray-500 mt-1">
-          Enter package names separated by commas
-        </p>
+            disabled={isInstalling || !pkgName.trim() || !sessionId}
+            className="px-4 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50"
+        >
+            {isInstalling ? 'Installing...' : 'Install'}
+        </button>
       </div>
 
-      {output && (
-        <div>
-          <div className="text-xs font-semibold text-gray-500 uppercase mb-1">
-            Installation Output
-          </div>
-          <pre className="bg-gray-50 p-3 rounded border border-gray-200 text-xs overflow-x-auto whitespace-pre-wrap">
-            {output}
-          </pre>
-        </div>
+      {!sessionId && (
+         <div className="text-xs text-yellow-600 bg-yellow-50 p-2 rounded">
+             Start a session to install packages.
+         </div>
       )}
-
-      {installedPackages.length > 0 && (
-        <div>
-          <div className="text-xs font-semibold text-gray-500 uppercase mb-1">
-            Installed Packages
-          </div>
-          <div className="bg-gray-50 p-3 rounded border border-gray-200">
-            <ul className="space-y-1">
-              {installedPackages.map((pkg, idx) => (
-                <li key={idx} className="text-sm">
-                  {pkg.name}
-                  {pkg.version && <span className="text-gray-500">@{pkg.version}</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
+      
+      <div className="text-xs text-gray-500">
+          Note: Packages are installed into the active session environment.
+      </div>
     </div>
   );
 }
-

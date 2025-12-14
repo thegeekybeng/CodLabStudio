@@ -26,3 +26,17 @@ body {
     rgb(var(--background-start-rgb));
 }
 
+
+/* Breakpoint Decoration */
+.debug-breakpoint-glyph {
+  background: #ef4444;
+  border-radius: 50%;
+  width: 12px !important;
+  height: 12px !important;
+  margin-left: 5px;
+  cursor: pointer;
+}
+
+.debug-breakpoint-line {
+    background: rgba(239, 68, 68, 0.1);
+}

@@ -13,6 +13,9 @@ RUN apt-get update && \
 # Copy package files
 COPY package*.json ./
 
+# Update npm to latest version
+RUN npm install -g npm@latest
+
 # Install dependencies
 RUN npm install
 

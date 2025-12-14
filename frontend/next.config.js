@@ -1,4 +1,3 @@
-/** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
@@ -9,6 +8,22 @@ const nextConfig = {
   },
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://backend:3001/api/:path*',
+      },
+      {
+        source: '/socket.io',
+        destination: 'http://backend:3001/socket.io/',
+      },
+      {
+        source: '/socket.io/:path*',
+        destination: 'http://backend:3001/socket.io/:path*',
+      },
+    ];
   },
 };
 

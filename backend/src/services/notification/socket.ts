@@ -1,8 +1,13 @@
 import { Server, Socket } from 'socket.io';
 import { collaborationService } from '../collaboration/collaborationService';
 
+// Singleton instance
+let ioInstance: Server | null = null;
+
 export const initializeSocketIO = (io: Server): void => {
+  ioInstance = io;
   io.on('connection', (socket: Socket) => {
+    // ... existing connection logic ...
     console.log('Client connected:', socket.id);
 
     let currentUserId: string | null = null;
@@ -60,7 +65,13 @@ export const initializeSocketIO = (io: Server): void => {
   });
 };
 
-export const emitToUser = (io: Server, userId: string, event: string, data: any): void => {
-  io.to(`user:${userId}`).emit(event, data);
+export const emitToUser = (userId: string, event: string, data: any): void => {
+  if (!ioInstance) {
+    console.warn('[SOCKET] emitToUser called before socket initialization (OK for testing)');
+    return;
+  }
+  ioInstance.to(`user:${userId}`).emit(event, data);
 };
+
+export const getIO = (): Server | null => ioInstance;
 

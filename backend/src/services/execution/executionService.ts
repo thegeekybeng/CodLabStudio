@@ -1,8 +1,8 @@
 import { PrismaClient, ExecutionStatus } from '@prisma/client';
-import { dockerService, ContainerConfig } from '../docker/dockerService';
+import { dockerService } from '../docker/dockerService';
+import { sessionService } from '../session/sessionService'; // Import Service
 import { AppError } from '../../middleware/errorHandler';
 import { emitToUser } from '../notification/socket';
-import { io } from '../../index';
 
 const prisma = new PrismaClient();
 
@@ -12,47 +12,6 @@ export interface ExecuteCodeInput {
   userId: string;
   notebookId?: string;
 }
-
-const LANGUAGE_IMAGES: Record<string, string> = {
-  python: 'python:3.11-alpine',
-  py: 'python:3.11-alpine',
-  'python3.10': 'python:3.10-alpine',
-  'python3.12': 'python:3.12-alpine',
-  javascript: 'node:20-alpine',
-  js: 'node:20-alpine',
-  node: 'node:20-alpine',
-  'node18': 'node:18-alpine',
-  'node19': 'node:19-alpine',
-  typescript: 'node:20-alpine',
-  ts: 'node:20-alpine',
-  java: 'openjdk:17-alpine',
-  'java11': 'openjdk:11-alpine',
-  'java21': 'openjdk:21-alpine',
-  cpp: 'gcc:latest',
-  c: 'gcc:latest',
-  go: 'golang:1.21-alpine',
-  'go1.20': 'golang:1.20-alpine',
-  'go1.22': 'golang:1.22-alpine',
-  rust: 'rust:1.70-alpine',
-  'rust1.69': 'rust:1.69-alpine',
-  'rust1.71': 'rust:1.71-alpine',
-  ruby: 'ruby:3.2-alpine',
-  'ruby3.1': 'ruby:3.1-alpine',
-  'ruby3.3': 'ruby:3.3-alpine',
-  php: 'php:8.2-alpine',
-  'php8.1': 'php:8.1-alpine',
-  'php8.3': 'php:8.3-alpine',
-  swift: 'swift:5.9',
-  kotlin: 'openjdk:17-alpine',
-  scala: 'openjdk:17-alpine',
-  r: 'r-base:latest',
-  julia: 'julia:1.9',
-  perl: 'perl:5.36',
-  bash: 'bash:latest',
-  shell: 'bash:latest',
-};
-
-const SUPPORTED_LANGUAGES = Object.keys(LANGUAGE_IMAGES);
 
 export class ExecutionService {
   async executeCode(input: ExecuteCodeInput): Promise<{ executionId: string }> {
@@ -67,26 +26,10 @@ export class ExecutionService {
       throw new AppError('Code size exceeds maximum limit', 400);
     }
 
-    // Validate language
-    const normalizedLanguage = language.toLowerCase();
-    if (!LANGUAGE_IMAGES[normalizedLanguage]) {
-      throw new AppError(
-        `Language ${language} is not supported. Supported languages: ${SUPPORTED_LANGUAGES.join(', ')}`,
-        400
-      );
-    }
-
-    const image = LANGUAGE_IMAGES[normalizedLanguage];
-
-    // Check if image exists, pull if not
-    const imageExists = await dockerService.imageExists(image);
-    if (!imageExists) {
-      emitToUser(io, userId, 'execution:status', {
-        status: 'PULLING_IMAGE',
-        message: `Pulling ${image}...`,
-      });
-      await dockerService.pullImage(image);
-    }
+    // 1. Get or Create Session (Persistent Container)
+    const { sessionId } = await sessionService.createSession({ userId, language });
+    const containerId = await sessionService.getSessionContainer(sessionId);
+    const container = dockerService.getContainer(containerId);
 
     // Determine auth type
     const isGuest = userId.startsWith('guest_');
@@ -97,7 +40,7 @@ export class ExecutionService {
     const execution = await prisma.execution.create({
       data: {
         code,
-        language: normalizedLanguage,
+        language: language.toLowerCase(),
         status: ExecutionStatus.PENDING,
         userId: dbUserId,
         guestId: dbGuestId,
@@ -106,9 +49,11 @@ export class ExecutionService {
     });
 
     // Execute in background
-    this.executeInContainer(execution.id, code, normalizedLanguage, image, userId)
+    console.log(`[EXEC] Starting background execution for ${execution.id} in session ${sessionId}`);
+    this.executeInContainer(execution.id, code, language, container, userId)
+      .then(() => console.log(`[EXEC] Finished background execution for ${execution.id}`))
       .catch((error) => {
-        console.error('Background execution error:', error);
+        console.error(`[EXEC] Background execution error for ${execution.id}:`, error);
       });
 
     return { executionId: execution.id };
@@ -118,7 +63,7 @@ export class ExecutionService {
     executionId: string,
     code: string,
     language: string,
-    image: string,
+    container: any, // Docker.Container
     userId: string
   ): Promise<void> {
     try {
@@ -128,25 +73,13 @@ export class ExecutionService {
         data: { status: ExecutionStatus.RUNNING },
       });
 
-      emitToUser(io, userId, 'execution:status', {
+      emitToUser(userId, 'execution:status', {
         executionId,
         status: 'RUNNING',
         message: 'Execution started...',
       });
 
-      // Create container
-      const containerConfig: ContainerConfig = {
-        image,
-        cmd: ['sh', '-c', 'sleep infinity'], // Keep container alive
-        env: ['PYTHONPATH=/python/site-packages'],
-        workingDir: '/tmp',
-        memory: 512 * 1024 * 1024, // 512MB
-        networkDisabled: true, // No network access for security
-        readonlyRootfs: false, // Need to write code file
-        binds: ['codlabstudio_codlabstudio_packages:/python/site-packages'],
-      };
-
-      const container = await dockerService.createContainer(containerConfig);
+      // No need to create container here anymore!
 
       // Execute code with progress streaming
       const result = await dockerService.executeCode(
@@ -155,7 +88,7 @@ export class ExecutionService {
         language,
         (type, data) => {
           // Emit streaming output to user
-          emitToUser(io, userId, 'execution:output', {
+          emitToUser(userId, 'execution:output', {
             executionId,
             type, // 'stdout' or 'stderr'
             data
@@ -198,7 +131,7 @@ export class ExecutionService {
         }).catch(console.error);
       }
 
-      emitToUser(io, userId, 'execution:complete', {
+      emitToUser(userId, 'execution:complete', {
         executionId,
         status: 'COMPLETED',
         stdout: result.stdout,
@@ -207,8 +140,10 @@ export class ExecutionService {
         executionTime: result.executionTime,
       });
 
-      // Cleanup container
-      await dockerService.stopContainer(container);
+      // Cleanup container - NO LONGER NEEDED as container is persistent
+      // await dockerService.stopContainer(container); 
+      // But we might want to manually invoke garbage collection eventually?
+
     } catch (error) {
       console.error('Execution error:', error);
 
@@ -222,7 +157,7 @@ export class ExecutionService {
         },
       });
 
-      emitToUser(io, userId, 'execution:error', {
+      emitToUser(userId, 'execution:error', {
         executionId,
         status: 'FAILED',
         error: errorMessage,
@@ -267,7 +202,7 @@ export class ExecutionService {
   }
 
   getSupportedLanguages(): string[] {
-    return SUPPORTED_LANGUAGES;
+    return sessionService.getSupportedLanguages();
   }
 }
 

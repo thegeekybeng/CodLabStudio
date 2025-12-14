@@ -1,8 +1,8 @@
 import { PrismaClient } from '@prisma/client';
-import { dockerService, ContainerConfig } from '../docker/dockerService';
+import { dockerService } from '../docker/dockerService';
+import { sessionService } from '../session/sessionService';
 import { AppError } from '../../middleware/errorHandler';
 import { emitToUser } from '../notification/socket';
-import { io } from '../../index';
 
 const prisma = new PrismaClient();
 
@@ -88,32 +88,23 @@ export class PackageService {
     }
 
     try {
-      // Create a temporary container to install packages
-      const image = this.getLanguageImage(normalizedLanguage);
-      const containerConfig: ContainerConfig = {
-        image,
-        cmd: ['sh', '-c', 'sleep infinity'],
-        env: [],
-        workingDir: '/tmp',
-        networkDisabled: false, // Need network for package downloads
-        binds: ['codlabstudio_codlabstudio_packages:/python/site-packages'],
-      };
+      // 1. Get Session Container
+      const { sessionId } = await sessionService.createSession({ userId, language });
+      const containerId = await sessionService.getSessionContainer(sessionId);
+      const container = dockerService.getContainer(containerId);
 
-      const container = await dockerService.createContainer(containerConfig);
-
-      // Start container
-      await container.start();
-
-      emitToUser(io, userId, 'package:install', {
+      emitToUser(userId, 'package:install', {
         status: 'INSTALLING',
         message: 'Installing packages...',
         packages,
       });
 
-      // Install packages using pip with target directory
-      const pipCmd = `pip install --target /python/site-packages ${packages.join(' ')}`;
+      // 2. Install packages directly in session container
+      // Use standard install command (no --target hacks needed for persistent container)
+      const installCmd = `${packageManager.installCmd} ${packages.join(' ')}`;
+
       const exec = await container.exec({
-        Cmd: ['sh', '-c', pipCmd],
+        Cmd: ['sh', '-c', installCmd],
         AttachStdout: true,
         AttachStderr: true,
       });
@@ -145,14 +136,12 @@ export class PackageService {
       const inspect = await exec.inspect();
       const exitCode = inspect.ExitCode || 0;
 
-      await dockerService.stopContainer(container);
-
       // Log package installation
       const isGuest = userId.startsWith('guest_');
       await prisma.auditLog.create({
         data: {
           userId: isGuest ? null : userId, // Pass null for guest users
-          actionType: 'UPLOAD_FILE', // Reuse action type
+          actionType: 'UPLOAD_FILE', // Reuse action type for now (should add INSTALL_PACKAGE enum)
           resourceType: 'package',
           details: {
             language,
@@ -207,26 +196,6 @@ export class PackageService {
   getSupportedLanguages(): string[] {
     return Object.keys(PACKAGE_MANAGERS);
   }
-
-  private getLanguageImage(language: string): string {
-    const images: Record<string, string> = {
-      python: 'python:3.11-alpine',
-      py: 'python:3.11-alpine',
-      javascript: 'node:20-alpine',
-      js: 'node:20-alpine',
-      node: 'node:20-alpine',
-      typescript: 'node:20-alpine',
-      ts: 'node:20-alpine',
-      java: 'openjdk:17-alpine',
-      go: 'golang:1.21-alpine',
-      rust: 'rust:1.70-alpine',
-      ruby: 'ruby:3.2-alpine',
-      php: 'php:8.2-alpine',
-    };
-
-    return images[language] || 'python:3.11-alpine';
-  }
 }
 
 export const packageService = new PackageService();
-

@@ -15,6 +15,9 @@ interface CodeEditorProps {
   userId?: string;
   onCollaborationUpdate?: (content: string, language: string) => void;
   onCursorChange?: (cursor: { line: number; column: number }) => void;
+  hideToolbar?: boolean;
+  breakpoints?: number[];
+  onBreakpointToggle?: (line: number) => void;
 }
 
 const LANGUAGE_OPTIONS = [
@@ -63,8 +66,13 @@ export default function CodeEditor({
   userId,
   onCollaborationUpdate,
   onCursorChange,
+  hideToolbar = false,
+  breakpoints = [],
+  onBreakpointToggle
 }: CodeEditorProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const monacoRef = useRef<Monaco | null>(null);
+  const decorationIdsRef = useRef<string[]>([]);
   const [showFindWidget, setShowFindWidget] = useState(false);
 
   const handleEditorDidMount = (
@@ -72,6 +80,7 @@ export default function CodeEditor({
     monaco: Monaco
   ) => {
     editorRef.current = editor;
+    monacoRef.current = monaco;
 
     // Configure editor options
     editor.updateOptions({
@@ -81,18 +90,15 @@ export default function CodeEditor({
       automaticLayout: true,
       wordWrap: "on",
       lineNumbers: "on",
+      glyphMargin: true,
       renderWhitespace: "selection",
       tabSize: 2,
-      // Enable error detection and diagnostics
       quickSuggestions: true,
       suggestOnTriggerCharacters: true,
       acceptSuggestionOnEnter: "on",
       tabCompletion: "on",
       wordBasedSuggestions: "matchingDocuments",
-      // Show errors and warnings
       renderValidationDecorations: "on",
-
-      // Enable find widget (Ctrl+F / Cmd+F)
       find: {
         addExtraSpaceOnTop: false,
         autoFindInSelection: "never",
@@ -100,9 +106,6 @@ export default function CodeEditor({
       },
     });
 
-    // Ensure find widget is accessible via keyboard shortcuts
-    // Ctrl+F (Windows/Linux) or Cmd+F (Mac) should work by default
-    // But we'll add explicit handlers to ensure it works
     const KeyMod = monaco.KeyMod;
     const KeyCode = monaco.KeyCode;
     
@@ -111,30 +114,20 @@ export default function CodeEditor({
       setShowFindWidget(true);
     });
 
-    // Also support Ctrl+H for find and replace
     editor.addCommand(KeyMod.CtrlCmd | KeyCode.KeyH, () => {
       editor.getAction("editor.action.startFindReplaceAction")?.run();
       setShowFindWidget(true);
     });
 
-    // Handle escape to close find widget
     editor.addCommand(KeyCode.Escape, () => {
       editor.getAction("closeFindWidget")?.run();
       setShowFindWidget(false);
     });
 
-    // Enable diagnostics/error detection for supported languages
     const model = editor.getModel();
     if (model) {
-      // For TypeScript/JavaScript, Monaco has built-in error detection
-      // For Python and other languages, we can add custom validation
       const language = model.getLanguageId();
-      
-      // Configure language-specific settings
       if (language === "python") {
-        // Python error detection (basic syntax checking)
-        // Monaco doesn't have built-in Python validation, but we can add markers
-        // For full Python linting, you'd need a language server
         monaco.languages.setLanguageConfiguration("python", {
           comments: {
             lineComment: "#",
@@ -155,20 +148,14 @@ export default function CodeEditor({
         });
       }
 
-      // Listen for model changes to show validation markers
       model.onDidChangeContent(() => {
-        // Basic validation - check for common syntax errors
-        // For production, consider integrating a language server
         const value = model.getValue();
         const errors: editor.IMarkerData[] = [];
 
-        // Basic Python syntax checks
         if (language === "python") {
           const lines = value.split("\n");
           lines.forEach((line, index) => {
             const lineNumber = index + 1;
-            
-            // Check for unmatched quotes
             const singleQuotes = (line.match(/'/g) || []).length;
             const doubleQuotes = (line.match(/"/g) || []).length;
             
@@ -193,19 +180,9 @@ export default function CodeEditor({
                 message: "Unmatched double quote",
               });
             }
-
-            // Check for common indentation issues (basic)
-            if (line.trim() && !line.startsWith(" ") && !line.startsWith("\t") && index > 0) {
-              const prevLine = lines[index - 1];
-              if (prevLine.trim().endsWith(":") && line.trim()) {
-                // This might need indentation
-                // We'll let Python runtime catch this, but we can warn
-              }
-            }
           });
         }
 
-        // Set markers (errors/warnings)
         if (errors.length > 0) {
           monaco.editor.setModelMarkers(model, "syntax-checker", errors);
         } else {
@@ -214,7 +191,6 @@ export default function CodeEditor({
       });
     }
 
-    // Track cursor position for collaboration
     if (onCursorChange) {
       editor.onDidChangeCursorPosition((e) => {
         onCursorChange({
@@ -224,14 +200,44 @@ export default function CodeEditor({
       });
     }
 
-    // Track content changes for collaboration
     if (onCollaborationUpdate) {
       editor.onDidChangeModelContent(() => {
         const content = editor.getValue();
         onCollaborationUpdate(content, language);
       });
     }
+
+    // Breakpoint Click Listener
+    if (onBreakpointToggle) {
+        editor.onMouseDown((e) => {
+            if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
+                const line = e.target.position?.lineNumber;
+                if (line) {
+                    onBreakpointToggle(line);
+                }
+            }
+        });
+    }
   };
+
+  // Decoration Update Effect
+  useEffect(() => {
+      if (!editorRef.current || !monacoRef.current) return;
+      
+      const editor = editorRef.current;
+      const monaco = monacoRef.current;
+
+      const decorations = breakpoints.map(line => ({
+          range: new monaco.Range(line, 1, line, 1),
+          options: {
+              isWholeLine: false,
+              glyphMarginClassName: 'debug-breakpoint-glyph',
+              glyphMarginHoverMessage: { value: 'Breakpoint' }
+          }
+      }));
+
+      decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, decorations);
+  }, [breakpoints]);
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLanguage = e.target.value;
@@ -255,82 +261,35 @@ export default function CodeEditor({
   };
 
   return (
-    <div className="w-full h-full flex flex-col border border-gray-300 rounded-lg overflow-hidden">
-      <div className="bg-gray-100 px-4 py-2 flex items-center justify-between border-b border-gray-300">
-        <div className="flex items-center gap-4">
-          <label
-            htmlFor="language-select"
-            className="text-sm font-medium text-gray-700"
-          >
-            Language:
-          </label>
-          <select
-            id="language-select"
-            value={language}
-            onChange={handleLanguageChange}
-            className="px-3 py-1 border border-gray-300 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            disabled={readOnly}
-          >
-            {LANGUAGE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleFindClick}
-            className="px-3 py-1 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-200 rounded-md transition-colors flex items-center gap-1"
-            title="Find (Ctrl+F / Cmd+F)"
-            disabled={readOnly}
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+    <div className={`w-full h-full flex flex-col overflow-hidden ${!hideToolbar ? 'border border-gray-300 rounded-lg' : ''}`}>
+      {!hideToolbar && (
+        <div className="bg-gray-100 px-4 py-2 flex items-center justify-between border-b border-gray-300">
+          <div className="flex items-center gap-4">
+            <label htmlFor="language-select" className="text-sm font-medium text-gray-700">Language:</label>
+            <select
+              id="language-select"
+              value={language}
+              onChange={handleLanguageChange}
+              className="px-3 py-1 border border-gray-300 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              disabled={readOnly}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            Find
-          </button>
-          <button
-            onClick={handleFindReplaceClick}
-            className="px-3 py-1 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-200 rounded-md transition-colors flex items-center gap-1"
-            title="Find & Replace (Ctrl+H / Cmd+H)"
-            disabled={readOnly}
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-              />
-            </svg>
-            Replace
-          </button>
-          {readOnly && <span className="text-xs text-gray-500">Read-only</span>}
+              {LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={handleFindClick} className="px-3 py-1 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-200 rounded-md transition-colors" title="Find (Ctrl+F)">Find</button>
+            <button onClick={handleFindReplaceClick} className="px-3 py-1 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-200 rounded-md transition-colors" title="Replace (Ctrl+H)">Replace</button>
+          </div>
         </div>
-      </div>
+      )}
       <div className="flex-1">
         <Editor
           height={height}
-          language={
-            LANGUAGE_OPTIONS.find((opt) => opt.value === language)?.monaco ||
-            language
-          }
+          language={LANGUAGE_OPTIONS.find((opt) => opt.value === language)?.monaco || language}
           value={value}
           onChange={onChange}
           onMount={handleEditorDidMount}

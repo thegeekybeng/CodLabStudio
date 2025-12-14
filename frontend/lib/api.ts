@@ -1,10 +1,10 @@
 import axios from 'axios';
 import { getGuestSessionHeader } from '@/utils/guestSession';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
+// Use relative path to leverage Next.js rewrites and avoid CORS/port issues
+// This also ensures we don't get double /api/api/ from env vars
 export const api = axios.create({
-  baseURL: `${API_URL}/api`,
+  baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -35,7 +35,8 @@ api.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
-          const response = await axios.post(`${API_URL}/api/auth/refresh`, {
+          // Use relative path for refresh too
+          const response = await axios.post('/api/auth/refresh', {
             refreshToken,
           });
 

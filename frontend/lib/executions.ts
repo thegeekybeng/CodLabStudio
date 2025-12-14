@@ -17,13 +17,19 @@ export interface Execution {
 
 export interface ExecuteCodeRequest {
   code: string;
+  sessionId: string;
   language: string;
   notebookId?: string;
 }
 
 export const executionsApi = {
   execute: async (data: ExecuteCodeRequest): Promise<{ executionId: string }> => {
-    const response = await api.post('/executions/execute', data);
+    // Backend expects { code, language } and infers session from user/guest context
+    const response = await api.post(`/executions/execute`, {
+      code: data.code,
+      language: data.language,
+      notebookId: data.notebookId
+    });
     return response.data.data;
   },
 
@@ -39,4 +45,3 @@ export const executionsApi = {
     return response.data.data;
   },
 };
-

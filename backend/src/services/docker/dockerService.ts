@@ -14,6 +14,7 @@ export interface ContainerConfig {
   cpuPeriod?: number;
   cpuQuota?: number;
   networkDisabled?: boolean;
+  networkMode?: string; // Add support for custom networks
   readonlyRootfs?: boolean;
   binds?: string[];
 }
@@ -51,7 +52,7 @@ export class DockerService {
           Memory: config.memory || this.MAX_MEMORY,
           CpuPeriod: config.cpuPeriod || 100000,
           CpuQuota: config.cpuQuota || this.MAX_CPU_QUOTA,
-          NetworkMode: config.networkDisabled ? 'none' : 'bridge',
+          NetworkMode: config.networkMode || (config.networkDisabled ? 'none' : 'bridge'),
           ReadonlyRootfs: config.readonlyRootfs || false,
           AutoRemove: true, // Auto-remove container when it stops
           Binds: config.binds || [],
@@ -62,9 +63,10 @@ export class DockerService {
       };
 
       const container = await docker.createContainer(containerConfig);
+      console.log(`[DOCKER] Container created: ${container.id}`);
       return container;
     } catch (error) {
-      console.error('Error creating container:', error);
+      console.error('[DOCKER] Error creating container:', error);
       throw new AppError('Failed to create execution container', 500);
     }
   }
@@ -78,8 +80,17 @@ export class DockerService {
     const startTime = Date.now();
 
     try {
-      // Start container
-      await container.start();
+      // Start container if not running
+      try {
+        await container.start();
+      } catch (err: any) {
+        // Ignore 304 (already started)
+        if (err.statusCode !== 304) {
+          // throw err; // Actually, looking at dockerode, 304 might be thrown as error or just returned.
+          // The previous error log showed it throwing.
+          console.log('[DOCKER] Container already running, proceeding...');
+        }
+      }
 
       // Create a script that writes code and executes it
       const executeScript = this.createExecuteScript(language, code);
@@ -175,6 +186,15 @@ export class DockerService {
     }
   }
 
+  getContainer(id: string): Docker.Container {
+    return docker.getContainer(id);
+  }
+
+  async stopContainerById(id: string): Promise<void> {
+    const container = this.getContainer(id);
+    await this.stopContainer(container);
+  }
+
   private createExecuteScript(language: string, code: string): string {
     // Escape code for shell
     const escapedCode = code.replace(/'/g, "'\\''");
@@ -194,7 +214,8 @@ export class DockerService {
         return `echo '${escapedCode}' > /tmp/code.js && node /tmp/code.js`;
       case 'typescript':
       case 'ts':
-        return `echo '${escapedCode}' > /tmp/code.ts && (tsc /tmp/code.ts 2>&1 && node /tmp/code.js || echo "TypeScript compilation failed")`;
+        // simplified npx command
+        return `echo '${escapedCode}' > /tmp/code.ts && (npx -y -p typescript tsc /tmp/code.ts 2>&1 && node /tmp/code.js || echo "TypeScript compilation failed")`;
       case 'java':
       case 'java11':
       case 'java17':
@@ -261,6 +282,21 @@ export class DockerService {
         });
       });
     });
+  }
+
+  async getContainerInspect(id: string): Promise<Docker.ContainerInspectInfo> {
+    const container = this.getContainer(id);
+    return await container.inspect();
+  }
+
+  async execDetached(container: Docker.Container, cmd: string[]): Promise<void> {
+    const exec = await container.exec({
+      Cmd: cmd,
+      AttachStdout: false,
+      AttachStderr: false,
+      Tty: false,
+    });
+    await exec.start({ Detach: true });
   }
 
   async imageExists(image: string): Promise<boolean> {

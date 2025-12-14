@@ -163,6 +163,14 @@ export default function DashboardPage() {
                   New Notebook
                 </Link>
               )}
+              {user?.role !== "GUEST" && (
+                <Link
+                  href="/studio"
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
+                >
+                  <span className="text-lg">⚡</span> Open Studio
+                </Link>
+              )}
               <DownloadSessionButton />
               {user?.role !== "GUEST" && (
                 <button

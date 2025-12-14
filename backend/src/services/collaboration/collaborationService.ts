@@ -1,4 +1,4 @@
-import { io } from '../../index';
+import { getIO } from '../notification/socket';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -90,15 +90,18 @@ export class CollaborationService {
     }, socketId);
 
     // Send current state to new participant
-    io.to(socketId).emit('collaboration:session_state', {
-      content: session.content,
-      language: session.language,
-      participants: Array.from(session.participants.values()).map((p) => ({
-        userId: p.userId,
-        email: p.email,
-        color: p.color,
-      })),
-    });
+    const io = getIO();
+    if (io) {
+      io.to(socketId).emit('collaboration:session_state', {
+        content: session.content,
+        language: session.language,
+        participants: Array.from(session.participants.values()).map((p) => ({
+          userId: p.userId,
+          email: p.email,
+          color: p.color,
+        })),
+      });
+    }
   }
 
   leaveSession(notebookId: string, userId: string, socketId: string): void {
@@ -195,6 +198,9 @@ export class CollaborationService {
     const session = this.sessions.get(notebookId);
     if (!session) return;
 
+    const io = getIO();
+    if (!io) return;
+
     session.participants.forEach((participant) => {
       if (participant.socketId !== excludeSocketId) {
         io.to(participant.socketId).emit(event, data);
@@ -226,4 +232,3 @@ export class CollaborationService {
 }
 
 export const collaborationService = new CollaborationService();
-

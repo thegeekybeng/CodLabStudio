@@ -1,8 +1,9 @@
 import { PrismaClient, DebugSessionStatus } from '@prisma/client';
-import { dockerService, ContainerConfig } from '../docker/dockerService';
+import { dockerService } from '../docker/dockerService';
+import { sessionService } from '../session/sessionService';
 import { AppError } from '../../middleware/errorHandler';
 import { emitToUser } from '../notification/socket';
-import { io } from '../../index';
+import { DapClient } from './dapClient';
 
 const prisma = new PrismaClient();
 
@@ -15,388 +16,250 @@ export interface StartDebugSessionInput {
 }
 
 export interface DebugCommand {
-  type: 'step_over' | 'step_into' | 'step_out' | 'continue' | 'pause' | 'evaluate';
+  type: 'step_over' | 'step_into' | 'step_out' | 'continue' | 'pause' | 'evaluate' | 'stop';
   expression?: string;
 }
 
-const DEBUGGABLE_LANGUAGES: Record<string, { image: string; debugger: string }> = {
+const DEBUG_CONFIG: Record<string, { cmd: string; port: number }> = {
   python: {
-    image: 'python:3.11-alpine',
-    debugger: 'debugpy',
-  },
-  py: {
-    image: 'python:3.11-alpine',
-    debugger: 'debugpy',
-  },
-  'python3.10': {
-    image: 'python:3.10-alpine',
-    debugger: 'debugpy',
-  },
-  'python3.12': {
-    image: 'python:3.12-alpine',
-    debugger: 'debugpy',
-  },
-  javascript: {
-    image: 'node:20-alpine',
-    debugger: 'node-inspector',
-  },
-  js: {
-    image: 'node:20-alpine',
-    debugger: 'node-inspector',
-  },
-  node: {
-    image: 'node:20-alpine',
-    debugger: 'node-inspector',
-  },
-  typescript: {
-    image: 'node:20-alpine',
-    debugger: 'node-inspector',
-  },
-  ts: {
-    image: 'node:20-alpine',
-    debugger: 'node-inspector',
-  },
-  java: {
-    image: 'openjdk:17-alpine',
-    debugger: 'jdwp',
+    // Optimized: debugpy is pre-installed in codlab-python
+    cmd: 'python3 -m debugpy --listen 0.0.0.0:5678 --wait-for-client /sessions/{sessionId}/user_script.py',
+    port: 5678,
   },
   go: {
-    image: 'golang:1.21-alpine',
-    debugger: 'delve',
-  },
-  rust: {
-    image: 'rust:1.70-alpine',
-    debugger: 'lldb',
-  },
+    cmd: 'sh -c "go install github.com/go-delve/delve/cmd/dlv@latest && /go/bin/dlv debug --headless --listen=:5678 --api-version=2 --accept-multiclient ."',
+    port: 5678,
+  }
+  // Add other languages here
 };
 
 export class DebugService {
-  private activeSessions = new Map<string, any>(); // sessionId -> container/debugger info
+  private activeClients = new Map<string, DapClient>(); // sessionId -> DapClient
 
   async startDebugSession(input: StartDebugSessionInput): Promise<{ sessionId: string }> {
     const { code, language, breakpoints, userId, notebookId } = input;
-
+    console.log(`[DEBUG_SERVICE] startDebugSession breakpoints:`, breakpoints);
     const normalizedLanguage = language.toLowerCase();
 
-    if (!DEBUGGABLE_LANGUAGES[normalizedLanguage]) {
-      throw new AppError(
-        `Debugging not supported for ${language}. Supported languages: ${Object.keys(DEBUGGABLE_LANGUAGES).join(', ')}`,
-        400
-      );
+    // 1. Get or Create Session
+    const { sessionId } = await sessionService.createSession({ userId, language: normalizedLanguage });
+    const containerId = await sessionService.getSessionContainer(sessionId);
+    const container = dockerService.getContainer(containerId);
+
+    // 2. Write Code to Session Volume
+    // We reuse the session volume mount at /sessions/{sessionId}
+    // Note: In real app, we might use a proper FileService. Here we use docker exec to write.
+    const filename = normalizedLanguage === 'go' ? 'main.go' : 'user_script.py';
+    const filePath = `/sessions/${sessionId}/${filename}`;
+    const writeCmd = `cat <<EOF > ${filePath}\n${code}\nEOF`;
+
+    await dockerService.executeCode(container, writeCmd, 'bash'); // Quick write using bash header
+
+    // 3. Get Debug Config
+    const config = DEBUG_CONFIG[normalizedLanguage] || DEBUG_CONFIG['python']; // Fallback/Default
+    if (!config) throw new AppError('Debug not supported for this language', 400);
+
+    const debugCmd = config.cmd.replace('{sessionId}', sessionId);
+
+    // 4. Cleanup Port & Start Debugger inside Container (Detached)
+    // Ensure port is free (kill any zombie debugpy from previous timeouts)
+    // BusyBox fuser syntax: fuser -k 5678/tcp
+    const cleanupCmd = `fuser -k ${config.port}/tcp || true`;
+    await dockerService.executeCode(container, cleanupCmd, 'sh');
+
+    // We assume the debugger will listen on 0.0.0.0 inside the container
+    await dockerService.execDetached(container, ['sh', '-c', debugCmd]);
+
+    // 5. Get Container IP to connect DAP Client
+    // Use configured network or default to the first available one
+    const inspect = await dockerService.getContainerInspect(containerId);
+    const networks = inspect.NetworkSettings.Networks;
+    const networkName = process.env.DOCKER_NETWORK;
+    const targetNet = networkName ? networks[networkName] : Object.values(networks)[0];
+
+    if (!targetNet) {
+      console.error('[DEBUG] Available networks:', Object.keys(networks));
+      throw new AppError('Could not find accessible network for container', 500);
     }
+    const containerIp = targetNet.IPAddress;
 
-    const langConfig = DEBUGGABLE_LANGUAGES[normalizedLanguage];
-    const image = langConfig.image;
+    // 6. Connect DAP Client
+    console.log(`[DEBUG] Connecting to DAP at ${containerIp}:${config.port}`);
 
-    // Check if image exists
-    const imageExists = await dockerService.imageExists(image);
-    if (!imageExists) {
-      emitToUser(io, userId, 'debug:status', {
-        status: 'PULLING_IMAGE',
-        message: `Pulling ${image}...`,
+    // Retry logic for connection (debugger takes time to start, especially with pip install)
+    let client: DapClient | null = null;
+    let connected = false;
+
+    for (let i = 0; i < 120; i++) { // 120 retries * 1000ms = 2 minutes (needed for initial go install dlv)
+      try {
+        client = new DapClient(containerIp, config.port);
+        await client.connect();
+        connected = true;
+        break;
+      } catch (e) {
+        // console.log('Retrying connection...');
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+    if (!connected || !client) throw new AppError('Failed to connect to debugger', 500);
+
+    this.activeClients.set(sessionId, client);
+
+    // 7. Initialize DAP
+    this.setupDapListeners(sessionId, userId, client);
+
+    await client.sendRequest('initialize', {
+      adapterID: normalizedLanguage,
+      linesStartAt1: true,
+      columnsStartAt1: true,
+      pathFormat: 'path',
+    });
+
+    await client.sendRequest('attach', {
+      name: 'Remote Attach',
+      type: 'python',
+      request: 'attach',
+      connect: {
+        host: 'localhost', // ignored by debugpy when we are the client connected via TCP?
+        port: config.port
+      },
+      pathMappings: [
+        {
+          localRoot: `/sessions/${sessionId}`, // We are running inside the container technically? No backend is separate.
+          remoteRoot: `/sessions/${sessionId}` // They share the volume mount path!
+        }
+      ]
+    });
+
+    // Set Breakpoints (Simplified: assuming file path matches)
+    if (breakpoints.length > 0) {
+      await client.sendRequest('setBreakpoints', {
+        source: { path: filePath },
+        breakpoints: breakpoints.map(l => ({ line: l })),
       });
-      await dockerService.pullImage(image);
     }
 
-    // Determine auth type
-    const isGuest = userId.startsWith('guest_');
-    const dbUserId = isGuest ? undefined : userId;
-    const dbGuestId = isGuest ? userId.replace('guest_', '') : undefined;
+    await client.sendRequest('configurationDone');
 
-    // Create debug session record
-    const session = await prisma.debugSession.create({
+    // Create DB Record
+    await prisma.debugSession.create({
       data: {
-        notebookId: notebookId || undefined,
-        userId: dbUserId,
-        guestId: dbGuestId,
-        breakpoints: breakpoints as any,
-        status: DebugSessionStatus.ACTIVE,
-        variables: {},
-        callStack: [],
-      },
-    });
-
-    // Start debug session in background
-    this.initializeDebugSession(session.id, code, normalizedLanguage, image, userId, breakpoints)
-      .catch((error) => {
-        console.error('Debug session initialization error:', error);
-      });
-
-    return { sessionId: session.id };
-  }
-
-  private async initializeDebugSession(
-    sessionId: string,
-    code: string,
-    language: string,
-    image: string,
-    userId: string,
-    breakpoints: number[]
-  ): Promise<void> {
-    try {
-      emitToUser(io, userId, 'debug:status', {
-        sessionId,
-        status: 'INITIALIZING',
-        message: 'Starting debug session...',
-      });
-
-      // Create container with debugger
-      const containerConfig: ContainerConfig = {
-        image,
-        cmd: this.getDebugCommand(language),
-        env: this.getDebugEnv(language),
-        workingDir: '/tmp',
-        memory: 512 * 1024 * 1024,
-        networkDisabled: false, // Debuggers need network for DAP/CDP
-        readonlyRootfs: false,
-      };
-
-      const container = await dockerService.createContainer(containerConfig);
-      await container.start();
-
-      // Store session info
-      this.activeSessions.set(sessionId, {
-        container,
-        language,
-        userId,
-        status: 'active',
-      });
-
-      // Stream logs
-      const stream = await container.attach({
-        stream: true,
-        stdout: true,
-        stderr: true,
-      });
-
-      container.modem.demuxStream(stream, {
-        write: (chunk: Buffer) => {
-          emitToUser(io, userId, 'debug:output', {
-            sessionId,
-            type: 'stdout',
-            content: chunk.toString(),
-          });
-        },
-      }, {
-        write: (chunk: Buffer) => {
-          emitToUser(io, userId, 'debug:output', {
-            sessionId,
-            type: 'stderr',
-            content: chunk.toString(),
-          });
-        },
-      });
-
-      // Write code with breakpoints
-      await this.setupDebugCode(container, code, language, breakpoints);
-
-      emitToUser(io, userId, 'debug:ready', {
-        sessionId,
-        status: 'READY',
-        message: 'Debug session ready',
-      });
-    } catch (error) {
-      console.error('Debug session initialization error:', error);
-      await prisma.debugSession.update({
-        where: { id: sessionId },
-        data: { status: DebugSessionStatus.TERMINATED },
-      });
-
-      emitToUser(io, userId, 'debug:error', {
-        sessionId,
-        status: 'ERROR',
-        error: error instanceof Error ? error.message : 'Failed to initialize debug session',
-      });
-    }
-  }
-
-  async executeDebugCommand(
-    sessionId: string,
-    userId: string,
-    command: DebugCommand
-  ): Promise<void> {
-    const session = this.activeSessions.get(sessionId);
-
-    if (!session) {
-      throw new AppError('Debug session not found or inactive', 404);
-    }
-
-    // Verify ownership
-    const isGuest = userId.startsWith('guest_');
-    const dbUserId = isGuest ? undefined : userId;
-    const dbGuestId = isGuest ? userId.replace('guest_', '') : undefined;
-
-    const dbSession = await prisma.debugSession.findFirst({
-      where: {
         id: sessionId,
-        userId: dbUserId,
-        guestId: dbGuestId
-      },
+        userId: userId,
+        notebookId: notebookId,
+        status: DebugSessionStatus.ACTIVE,
+        breakpoints: JSON.stringify(breakpoints) as any,
+      }
+    }).catch(e => console.error("DB Error (ignoring for now):", e));
+
+    return { sessionId };
+  }
+
+  private setupDapListeners(sessionId: string, userId: string, client: DapClient) {
+    client.on('stopped', async (event) => {
+      // Fetch stack trace when stopped
+      const threadId = event.threadId;
+      const stack = await client.sendRequest('stackTrace', { threadId });
+      const topFrame = stack.stackFrames[0];
+
+      let variables: any[] = [];
+      if (topFrame) {
+        const scopes = await client.sendRequest('scopes', { frameId: topFrame.id });
+        if (scopes.scopes.length > 0) {
+          const vars = await client.sendRequest('variables', { variablesReference: scopes.scopes[0].variablesReference });
+          variables = vars.variables;
+        }
+      }
+
+      emitToUser(userId, 'debug:paused', {
+        sessionId,
+        reason: event.reason,
+        stack: stack.stackFrames,
+        variables,
+      });
     });
 
-    if (!dbSession) {
-      throw new AppError('Debug session not found', 404);
-    }
+    client.on('output', (event) => {
+      if (event.category === 'stdout' || event.category === 'stderr') {
+        emitToUser(userId, 'debug:output', {
+          sessionId,
+          type: event.category,
+          content: event.output
+        });
+      }
+    });
 
-    try {
-      // Execute debug command based on language
-      const result = await this.handleDebugCommand(session, command);
-
-      // Update session state
-      await prisma.debugSession.update({
-        where: { id: sessionId },
-        data: {
-          currentLine: result.currentLine,
-          variables: result.variables as any,
-          callStack: result.callStack as any,
-        },
-      });
-
-      emitToUser(io, userId, 'debug:event', {
-        sessionId,
-        type: command.type,
-        currentLine: result.currentLine,
-        variables: result.variables,
-        callStack: result.callStack,
-      });
-    } catch (error) {
-      console.error('Debug command error:', error);
-      emitToUser(io, userId, 'debug:error', {
-        sessionId,
-        error: error instanceof Error ? error.message : 'Debug command failed',
-      });
-    }
+    client.on('terminated', () => {
+      this.activeClients.delete(sessionId);
+      emitToUser(userId, 'debug:terminated', { sessionId });
+    });
   }
 
   async stopDebugSession(sessionId: string, userId: string): Promise<void> {
-    const session = this.activeSessions.get(sessionId);
+    console.log(`[DEBUG] Stopping session ${sessionId} for user ${userId}`);
+    const client = this.activeClients.get(sessionId);
+    if (client) {
+      await client.disconnect();
+      this.activeClients.delete(sessionId);
+    }
 
-    if (!session) {
+    // Update DB
+    await prisma.debugSession.update({
+      where: { id: sessionId },
+      data: { status: DebugSessionStatus.TERMINATED }
+    }).catch(e => console.log('DB update failed, ignoring', e));
+
+    emitToUser(userId, 'debug:terminated', { sessionId });
+  }
+
+  async getDebugSession(sessionId: string, userId: string): Promise<any> {
+    // Return DB record or active status
+    const session = await prisma.debugSession.findUnique({
+      where: { id: sessionId }
+    });
+
+    if (!session || session.userId !== userId) {
       throw new AppError('Debug session not found', 404);
     }
 
-    // Verify ownership
-    // Verify ownership
-    const isGuest = userId.startsWith('guest_');
-    const dbUserId = isGuest ? undefined : userId;
-    const dbGuestId = isGuest ? userId.replace('guest_', '') : undefined;
-
-    const dbSession = await prisma.debugSession.findFirst({
-      where: {
-        id: sessionId,
-        userId: dbUserId,
-        guestId: dbGuestId
-      },
-    });
-
-    if (!dbSession) {
-      throw new AppError('Debug session not found', 404);
-    }
-
-    try {
-      // Stop container
-      if (session.container) {
-        await dockerService.stopContainer(session.container);
-      }
-
-      // Update session
-      await prisma.debugSession.update({
-        where: { id: sessionId },
-        data: { status: DebugSessionStatus.TERMINATED },
-      });
-
-      // Remove from active sessions
-      this.activeSessions.delete(sessionId);
-
-      emitToUser(io, userId, 'debug:stopped', {
-        sessionId,
-        status: 'STOPPED',
-      });
-    } catch (error) {
-      console.error('Error stopping debug session:', error);
-      throw new AppError('Failed to stop debug session', 500);
-    }
+    const isActive = this.activeClients.has(sessionId);
+    return { ...session, isActive };
   }
 
-  async getDebugSession(sessionId: string, userId: string) {
-    const isGuest = userId.startsWith('guest_');
-    const dbUserId = isGuest ? undefined : userId;
-    const dbGuestId = isGuest ? userId.replace('guest_', '') : undefined;
+  async executeDebugCommand(sessionId: string, _userId: string, command: DebugCommand): Promise<void> {
+    const client = this.activeClients.get(sessionId);
+    if (!client) throw new AppError('Debug session not found', 404);
 
-    const session = await prisma.debugSession.findFirst({
-      where: {
-        id: sessionId,
-        userId: dbUserId,
-        guestId: dbGuestId
-      },
-    });
-
-    if (!session) {
-      throw new AppError('Debug session not found', 404);
-    }
-
-    return session;
-  }
-
-  private async setupDebugCode(
-    container: any,
-    code: string,
-    _language: string,
-    _breakpoints: number[]
-  ): Promise<void> {
-    // This would write code with debugger configuration
-    // Implementation depends on specific debugger protocol
-    const exec = await container.exec({
-      Cmd: ['sh', '-c', `echo '${code.replace(/'/g, "'\\''")}' > /tmp/user_script.py`],
-      AttachStdout: true,
-      AttachStderr: true,
-    });
-
-    await exec.start({});
-  }
-
-  private async handleDebugCommand(_session: any, _command: DebugCommand): Promise<any> {
-    // Simplified implementation - would integrate with actual debugger protocols
-    // (DAP for Python, CDP for Node.js)
-    return {
-      currentLine: 1,
-      variables: {},
-      callStack: [],
-    };
-  }
-
-  private getDebugCommand(language: string): string[] {
-    switch (language) {
-      case 'python':
-      case 'py':
-        return ['sh', '-c', 'pip install debugpy && python3 -m debugpy --listen 0.0.0.0:5678 --wait-for-client /tmp/user_script.py'];
-      case 'javascript':
-      case 'js':
-      case 'node':
-        return ['sh', '-c', 'node --inspect=0.0.0.0:9229 /tmp/code.js'];
-      default:
-        return ['sh', '-c', 'sleep infinity'];
-    }
-  }
-
-  private getDebugEnv(language: string): string[] {
-    switch (language) {
-      case 'python':
-      case 'py':
-        return ['PYTHONUNBUFFERED=1'];
-      case 'javascript':
-      case 'js':
-      case 'node':
-        return ['NODE_OPTIONS=--inspect'];
-      default:
-        return [];
+    switch (command.type) {
+      case 'step_over':
+        await client.sendRequest('next', { threadId: 1 }); // customize threadId if needed
+        break;
+      case 'step_into':
+        await client.sendRequest('stepIn', { threadId: 1 });
+        break;
+      case 'step_out':
+        await client.sendRequest('stepOut', { threadId: 1 });
+        break;
+      case 'continue':
+        await client.sendRequest('continue', { threadId: 1 });
+        break;
+      case 'stop':
+        await client.disconnect();
+        this.activeClients.delete(sessionId);
+        break;
+      case 'evaluate':
+        if (command.expression) {
+          // Get info for context, assume frameId 0 or tracked state
+          // Simplified:
+          // const resp = await client.sendRequest('evaluate', { expression: command.expression, frameId: ... });
+        }
+        break;
     }
   }
 
   getDebuggableLanguages(): string[] {
-    return Object.keys(DEBUGGABLE_LANGUAGES);
+    return Object.keys(DEBUG_CONFIG);
   }
 }
 
 export const debugService = new DebugService();
-
