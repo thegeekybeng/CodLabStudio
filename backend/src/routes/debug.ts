@@ -4,6 +4,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { guestSessionMiddleware, GuestRequest } from '../middleware/guestSession';
 import { AppError } from '../middleware/errorHandler';
 import { debugService } from '../services/debug/debugService';
+import { dockerService } from '../services/docker/dockerService';
 
 const router = Router();
 
@@ -25,6 +26,17 @@ router.get('/languages', (_req, res) => {
     success: true,
     data: debugService.getDebuggableLanguages(),
   });
+});
+
+// Manual Prune (Zombie Killer)
+router.post('/prune', async (_req, res, next) => {
+  try {
+    console.log('[DEBUG_ROUTE] Triggering manual zombie prune...');
+    await dockerService.pruneSessionContainers();
+    res.json({ success: true, message: 'Zombie containers pruned.' });
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Start debug session (supports both authenticated and guest sessions)

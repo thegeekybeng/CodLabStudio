@@ -125,7 +125,13 @@ export class SessionService {
                 binds: [
                     `${sessionVolume}:/sessions` // Persist all sessions data
                 ],
-                workingDir: `/sessions/${sessionId}`
+                workingDir: `/sessions/${sessionId}`,
+                labels: {
+                    app: 'codlabstudio',
+                    type: 'session_worker',
+                    sessionId: sessionId,
+                    userId: userId
+                }
             };
 
             const container = await dockerService.createContainer(containerConfig);
@@ -191,6 +197,20 @@ export class SessionService {
         session.status = 'inactive';
         this.activeSessions.delete(sessionId);
         this.userSessions.delete(session.userId);
+    }
+
+    async terminateUserSession(userId: string): Promise<void> {
+        const sessionId = this.userSessions.get(userId);
+        if (sessionId) {
+            console.log(`[GOVERNANCE] Terminating abandoned session ${sessionId} for user ${userId}`);
+            await this.stopSession(sessionId);
+        }
+    }
+
+    async terminateAllSessions(): Promise<void> {
+        console.log(`[SESSION] Terminating all ${this.activeSessions.size} active sessions...`);
+        const sessions = Array.from(this.activeSessions.keys());
+        await Promise.all(sessions.map(sessionId => this.stopSession(sessionId)));
     }
 }
 

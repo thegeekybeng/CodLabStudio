@@ -59,9 +59,6 @@ export function getGuestSessionHeader(): { 'x-guest-session-id'?: string } {
   let sessionId = getGuestSessionId();
 
   if (!sessionId) {
-    return {};
-  }
-  if (!sessionId) {
     // Generate local ID synchronously for headers
     // The formal creation/sync with backend should happen elsewhere or lazily
     sessionId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;

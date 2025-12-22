@@ -9,6 +9,7 @@ import { rateLimiter } from './middleware/rateLimiter';
 import { securityHeaders, sanitizeInput, validateRequestSize } from './middleware/security';
 import { requestLogger } from './middleware/logger';
 import { guestSessionMiddleware } from './middleware/guestSession';
+import { telemetryMiddleware } from './middleware/telemetry';
 import authRoutes from './routes/auth';
 import notebookRoutes from './routes/notebooks';
 import executionRoutes from './routes/executions';
@@ -16,10 +17,15 @@ import debugRoutes from './routes/debug';
 import packageRoutes from './routes/packages';
 import gitRoutes from './routes/git';
 import sessionRoutes from './routes/session';
+import { sessionService } from './services/session/sessionService';
 import { initializeSocketIO } from './services/notification/socket';
+import { dockerService } from './services/docker/dockerService';
 import seed from './database/seed';
 
 dotenv.config();
+
+// Cleanup orphan containers on startup
+dockerService.pruneSessionContainers().catch(console.error);
 
 // Seed admin user on startup
 seed().catch((error) => {
@@ -81,6 +87,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Logging
 app.use(requestLogger);
 
+// Telemetry (Low-volume visitor tracking)
+app.use(telemetryMiddleware);
+
 // Guest session middleware (before routes)
 app.use(guestSessionMiddleware);
 
@@ -106,6 +115,31 @@ initializeSocketIO(io);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);
+
+const gracefulShutdown = async (signal: string) => {
+  console.log(`[SERVER] Received ${signal}. Starting graceful shutdown...`);
+
+  // 1. Close HTTP server to stop accepting new requests
+  httpServer.close(() => {
+    console.log('[SERVER] HTTP server closed.');
+  });
+
+  // 2. Cleanup active sessions
+  try {
+    console.log('[SERVER] Cleaning up active sessions...');
+    await sessionService.terminateAllSessions();
+    // Also run the docker prune as a safety net
+    await dockerService.pruneSessionContainers();
+    console.log('[SERVER] Session cleanup complete.');
+  } catch (err) {
+    console.error('[SERVER] Error during session cleanup:', err);
+  }
+
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

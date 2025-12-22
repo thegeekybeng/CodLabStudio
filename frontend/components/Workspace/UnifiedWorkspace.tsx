@@ -49,7 +49,8 @@ export default function UnifiedWorkspace({
     // Initialize Socket
     useSocket();
 
-    const [activeTab, setActiveTab] = useState<'explorer' | 'debug' | 'packages' | 'settings'>('explorer');
+    const [activeTab, setActiveTab] = useState<'explorer' | 'packages' | 'settings'>('explorer');
+    const [rightPanelTab, setRightPanelTab] = useState<'terminal' | 'debug'>('terminal');
     const [code, setCode] = useState<string>(initialCode);
     const [selectedLanguage, setSelectedLanguage] = useState<string>(initialLanguage);
     const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -160,7 +161,6 @@ export default function UnifiedWorkspace({
                 {/* Activity Bar (Left Thin Strip) */}
                 <div className="w-12 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-4 gap-4 shrink-0">
                     <ActivityIcon icon="📄" label="Explorer" active={activeTab === 'explorer'} onClick={() => { setActiveTab('explorer'); setSidebarOpen(true); }} />
-                    <ActivityIcon icon="🐞" label="Debug" active={activeTab === 'debug'} onClick={() => { setActiveTab('debug'); setSidebarOpen(true); }} />
                     <ActivityIcon icon="📦" label="Packages" active={activeTab === 'packages'} onClick={() => { setActiveTab('packages'); setSidebarOpen(true); }} />
                     <div className="flex-1" />
                     <ActivityIcon icon="⚙️" label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
@@ -179,14 +179,6 @@ export default function UnifiedWorkspace({
                                     <p className="mb-2">File Explorer not implemented yet.</p>
                                     <p className="text-xs">Current file is in-memory only.</p>
                                 </div>
-                            )}
-                            {activeTab === 'debug' && (
-                                <DebugPanel 
-                                    code={code} 
-                                    language={language || 'python'}
-                                    breakpoints={breakpoints}
-                                    onBreakpointToggle={handleBreakpointToggle}
-                                />
                             )}
                             {activeTab === 'packages' && (
                                 <PackageManager language={language || 'python'} />
@@ -227,10 +219,40 @@ export default function UnifiedWorkspace({
                     </div>
                 </div>
 
-                {/* Terminal Area (Right Column) */}
+                {/* Right Panel (Terminal + Debug) */}
                 {isOutputOpen && (
-                    <div className="w-[400px] shrink-0 flex flex-col bg-black">
-                        <Terminal />
+                    <div className="w-[400px] shrink-0 flex flex-col bg-gray-900 border-l border-gray-800">
+                        {/* Right Panel Tabs */}
+                        <div className="flex items-center border-b border-gray-800 bg-gray-900">
+                            <button 
+                                onClick={() => setRightPanelTab('terminal')}
+                                className={`px-4 py-2 text-xs font-bold uppercase transition-colors ${rightPanelTab === 'terminal' ? 'text-white border-b-2 border-primary-500 bg-gray-800' : 'text-gray-500 hover:text-gray-300'}`}
+                            >
+                                Terminal
+                            </button>
+                            <button 
+                                onClick={() => setRightPanelTab('debug')}
+                                className={`px-4 py-2 text-xs font-bold uppercase transition-colors ${rightPanelTab === 'debug' ? 'text-white border-b-2 border-primary-500 bg-gray-800' : 'text-gray-500 hover:text-gray-300'}`}
+                            >
+                                Debugger
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-hidden relative">
+                             <div className={`absolute inset-0 flex flex-col ${rightPanelTab === 'terminal' ? 'z-10 opacity-100' : 'z-0 opacity-0 pointer-events-none'}`}>
+                                <Terminal />
+                             </div>
+                             {rightPanelTab === 'debug' && (
+                                 <div className="absolute inset-0 flex flex-col overflow-y-auto bg-gray-900 p-2">
+                                     <DebugPanel 
+                                        code={code} 
+                                        language={language || 'python'}
+                                        breakpoints={breakpoints}
+                                        onBreakpointToggle={handleBreakpointToggle}
+                                     />
+                                 </div>
+                             )}
+                        </div>
                     </div>
                 )}
             </div>

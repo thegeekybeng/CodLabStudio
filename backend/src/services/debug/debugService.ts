@@ -23,7 +23,7 @@ export interface DebugCommand {
 const DEBUG_CONFIG: Record<string, { cmd: string; port: number }> = {
   python: {
     // Optimized: debugpy is pre-installed in codlab-python
-    cmd: 'python3 -m debugpy --listen 0.0.0.0:5678 --wait-for-client /sessions/{sessionId}/user_script.py',
+    cmd: 'python3 -u -m debugpy --listen 0.0.0.0:5678 --wait-for-client /sessions/{sessionId}/user_script.py',
     port: 5678,
   },
   go: {
@@ -53,7 +53,7 @@ export class DebugService {
     const filePath = `/sessions/${sessionId}/${filename}`;
     const writeCmd = `cat <<EOF > ${filePath}\n${code}\nEOF`;
 
-    await dockerService.executeCode(container, writeCmd, 'bash'); // Quick write using bash header
+    await dockerService.executeCode(container, writeCmd, 'sh'); // Quick write using shell (bash might not be installed)
 
     // 3. Get Debug Config
     const config = DEBUG_CONFIG[normalizedLanguage] || DEBUG_CONFIG['python']; // Fallback/Default
@@ -108,6 +108,38 @@ export class DebugService {
     // 7. Initialize DAP
     this.setupDapListeners(sessionId, userId, client);
 
+    // 7. Initialize DAP
+    this.setupDapListeners(sessionId, userId, client);
+
+    const configurationDonePromise = new Promise<void>((resolve, reject) => {
+      if (!client) return reject(new Error('Client not initialized'));
+
+      client.on('initialized', async () => {
+        try {
+          console.log('[DEBUG] Received initialized event, sending configuration...');
+          // 7b. Enable Exception Breakpoints (Critical for stopping on errors)
+          await client?.sendRequest('setExceptionBreakpoints', {
+            filters: ['uncaught']
+          });
+
+          // Set Breakpoints
+          if (breakpoints.length > 0) {
+            await client?.sendRequest('setBreakpoints', {
+              source: { path: filePath },
+              breakpoints: breakpoints.map(l => ({ line: l })),
+            });
+          }
+
+          await client?.sendRequest('configurationDone');
+          console.log('[DEBUG] Configuration done sent.');
+          resolve();
+        } catch (err) {
+          console.error('[DEBUG] Configuration failed:', err);
+          reject(err);
+        }
+      });
+    });
+
     await client.sendRequest('initialize', {
       adapterID: normalizedLanguage,
       linesStartAt1: true,
@@ -115,31 +147,34 @@ export class DebugService {
       pathFormat: 'path',
     });
 
-    await client.sendRequest('attach', {
+    // Send attach request - do not await strictly if it blocks, but usually it should return.
+    // However, to be safe against the deadlock seen in logs, we wont block 'configurationDone' on 'attach' response.
+    // We start the attach request, and the initialized event will fire (as seen in logs).
+    const attachPromise = client.sendRequest('attach', {
       name: 'Remote Attach',
       type: 'python',
       request: 'attach',
       connect: {
-        host: 'localhost', // ignored by debugpy when we are the client connected via TCP?
+        host: 'localhost',
         port: config.port
       },
       pathMappings: [
         {
-          localRoot: `/sessions/${sessionId}`, // We are running inside the container technically? No backend is separate.
-          remoteRoot: `/sessions/${sessionId}` // They share the volume mount path!
+          localRoot: `/sessions/${sessionId}`,
+          remoteRoot: `/sessions/${sessionId}`
         }
-      ]
+      ],
+      redirectOutput: true,
     });
 
-    // Set Breakpoints (Simplified: assuming file path matches)
-    if (breakpoints.length > 0) {
-      await client.sendRequest('setBreakpoints', {
-        source: { path: filePath },
-        breakpoints: breakpoints.map(l => ({ line: l })),
-      });
-    }
+    // Wait for EITHER attach to return OR configuration to complete.
+    // In the deadlock case, configurationDone needs to happen for attach to return (maybe).
+    // So we await the configuration cycle which is triggered by 'initialized' event.
+    await configurationDonePromise;
 
-    await client.sendRequest('configurationDone');
+    // We can await attach now, or assume it's fine. 
+    // If we await it here, and it was waiting for config, it should resolve now.
+    await attachPromise;
 
     // Create DB Record
     await prisma.debugSession.create({
@@ -156,36 +191,76 @@ export class DebugService {
   }
 
   private setupDapListeners(sessionId: string, userId: string, client: DapClient) {
-    client.on('stopped', async (event) => {
-      // Fetch stack trace when stopped
-      const threadId = event.threadId;
-      const stack = await client.sendRequest('stackTrace', { threadId });
-      const topFrame = stack.stackFrames[0];
+    client.on('output', (event) => {
+      // Filter out internal noise
+      const content = event.output;
+      const category = event.category;
 
-      let variables: any[] = [];
-      if (topFrame) {
-        const scopes = await client.sendRequest('scopes', { frameId: topFrame.id });
-        if (scopes.scopes.length > 0) {
-          const vars = await client.sendRequest('variables', { variablesReference: scopes.scopes[0].variablesReference });
-          variables = vars.variables;
-        }
+      // Skip internal debugpy/system logs
+      if (category === 'telemetry') return; // Always skip telemetry
+      if (content.includes('debugpy') || content.includes('/usr/local/lib') || content.includes('site-packages') || content.includes('runpy.py')) {
+        // console.log('[DEBUG FILTERED]', content);
+        return;
       }
 
-      emitToUser(userId, 'debug:paused', {
+      // Skip strange "start" messages if they are just tech noise
+      if (content === 'start' || event.data?.output === 'start') return;
+
+      emitToUser(userId, 'debug:output', {
         sessionId,
-        reason: event.reason,
-        stack: stack.stackFrames,
-        variables,
+        content: event.output,
+        category: event.category,
+        source: event.source,
+        line: event.line
       });
     });
 
-    client.on('output', (event) => {
-      if (event.category === 'stdout' || event.category === 'stderr') {
-        emitToUser(userId, 'debug:output', {
-          sessionId,
-          type: event.category,
-          content: event.output
+    client.on('stopped', async (event) => {
+      // Fetch stack trace
+      const threadId = event.threadId || 1;
+      try {
+        const stackTrace = await client.sendRequest('stackTrace', { threadId });
+
+        // Filter stack frames to hide internals
+        const cleanFrames = stackTrace.stackFrames.filter((frame: any) => {
+          const sourcePath = frame.source?.path || '';
+          // Drop if it matches internal paths
+          if (sourcePath.includes('site-packages') || sourcePath.includes('/usr/local/lib') || sourcePath.includes('runpy.py') || sourcePath.includes('debugpy')) {
+            return false;
+          }
+          return true;
         });
+
+        // If we filtered everything (rare), keep the top one at least so UI doesn't break? 
+        // Or just use the original if clean is empty.
+        const framesToSend = cleanFrames.length > 0 ? cleanFrames : stackTrace.stackFrames;
+
+        const topFrame = framesToSend[0];
+
+        // Get variables for top frame
+        const scopes = await client.sendRequest('scopes', { frameId: topFrame.id });
+        const localScope = scopes.scopes.find((s: any) => s.name === 'Locals');
+
+        let variables = {};
+        if (localScope) {
+          const varsContext = await client.sendRequest('variables', { variablesReference: localScope.variablesReference });
+          variables = varsContext.variables.reduce((acc: any, v: any) => {
+            // Filter special vars if needed (e.g. __name__) but usually fine
+            acc[v.name] = v.value;
+            return acc;
+          }, {});
+        }
+
+        emitToUser(userId, 'debug:paused', {
+          sessionId,
+          reason: event.reason,
+          line: topFrame.line,
+          source: topFrame.source,
+          variables,
+          stackFrames: framesToSend // Send cleaned stack
+        });
+      } catch (e) {
+        console.error('Failed to fetch stack trace/variables:', e);
       }
     });
 

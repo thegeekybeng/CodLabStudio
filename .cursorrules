@@ -1,24 +1,67 @@
-# Cursor IDE Rules for Universal Notebook Project
+# ============================================================
+#  AI OPERATIONAL PROTOCOLS (GOVERNANCE LAYER)
+#  "The Constitution" v2.0
+# ============================================================
 
-This file contains project-specific rules. For global development standards, see:
-- ~/.cursor/development-rules.md
-- ~/.cursor/neatness-standard.md
-- ~/.cursor/ai-assistant-rules.md
+## 0. THE INITIALIZATION PROTOCOL (CRITICAL)
+Whenever a new chat starts, or if the chat window's memory starts to get fuzzy:
+*   **YOU MUST** read `AI_RULES.md` and `SYSTEM_LOG.md`.
+*   **YOU MUST** acknowledge the architectural constraints before we begin.
 
-## Project-Specific Rules
+## 1. THE PORT AUTHORITY RULE (MANDATORY)
+Before writing any `docker-compose.yml` or running `docker run`:
+*   **YOU MUST** read `PORTS.md`.
+*   **YOU MUST** run `docker ps --format "table {{.Names}}\t{{.Ports}}"` to verify ground truth.
+*   **YOU MUST** update `PORTS.md` if you find undocumented containers.
+*   **YOU MUST** assign a new port that does not conflict.
 
-### Code Style
-- Follow existing TypeScript/React patterns
-- Use Prisma for database operations
-- Docker-based execution environment
+## 2. THE PERSISTENCE RULE
+*   All execution containers must use the `python3 -u` flag for unbuffered output.
+*   All Nginx configs must use "Safe Mode" logging (no high-frequency logs to stdout) to prevent NAS I/O starvation.
 
-### Documentation
-- Keep troubleshooting in docs/troubleshooting/active/
-- Archive resolved issues to docs/troubleshooting/archived/
-- Co-locate scripts with related documentation
+## 3. STRUCTURAL LITERACY & SIGNPOSTING (NEW)
+**The "Human-Readable" Standard:**
+All configuration files (Dockerfile, Nginx, Compose, Scripts) MUST use **Numbered Sectional Dividers**.
+*   **Example:**
+    ```dockerfile
+    # --- 1. SYSTEM DEPENDENCIES ---
+    RUN apk add --no-cache openssl
+    # --- 2. CONFIGURATION ASSETS ---
+    COPY package*.json ./
+    ```
 
-### Verification
-- Always verify code exists before suggesting changes
-- Read files before modifying
-- Test solutions in Docker environment
+## 4. THE ANTI-LOOP PROTOCOL (NEW)
+If a build or execution fails:
+1.  **STOP.** Do not immediately retry the exact same command.
+2.  **READ.** Run `cat [filename]` to verify the *actual* state on disk (bypass context cache).
+3.  **ANALYZE.** Compare Error Log vs. File Content.
+4.  **LIMIT.** Maximum **2 attempts** to fix. If failed, stop and ask the User.
 
+## 5. CONTEXT VERIFICATION
+*   **Trust the Disk, Not the Chat.** Always verify file existence (`ls`) and content (`cat`) before assuming a fix worked.
+
+## 6. PRODUCTION READINESS STANDARDS (MANDATORY)
+**Data Persistence:**
+*   **Requirement:** Any Database service (Postgres, Redis, etc.) MUST have a named volume mapped to its data directory (e.g., `/var/lib/postgresql/data`).
+*   **Forbidden:** Do not use ephemeral/anonymous volumes for databases.
+
+**Startup Logic (The "Race Condition" Fix):**
+*   **Requirement:** The App container command MUST include a database migration/push step before starting the server.
+*   **Example:** `command: sh -c "npx prisma db push && npm start"`
+
+**Environment Governance:**
+*   **Requirement:** For Next.js/Web apps, explicitly define `NEXT_PUBLIC_APP_URL` or `ORIGIN` in the `.env` template to prevent CORS/Server Action failures.
+
+## 7. THE FLIGHT RECORDER PROTOCOL (MEMORY PERSISTENCE)
+**When to Trigger:**
+After successfully resolving a build error, a crash loop, or a logic bug (after 2+ failed attempts).
+
+**The Action:**
+*   **YOU MUST** append a new entry to `SYSTEM_LOG.md`.
+*   **Format:**
+    *   **Symptom:** What broke?
+    *   **Root Cause:** Why did it break?
+    *   **Failed Attempts:** What did we try that didn't work? (Critical for preventing regression).
+    *   **The Fix:** What was the final working code/command?
+
+**Why:** You have no long-term memory. This file is your memory. Read it before debugging.

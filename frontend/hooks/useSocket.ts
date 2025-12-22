@@ -44,6 +44,10 @@ export const useSocket = () => {
         });
 
         socket.on('execution:output', (data: any) => {
+            // Prevent double logging: Ignore execution output if we are debugging
+            // (The DebugPanel handles debug:output in that case)
+            if (useSessionStore.getState().status === 'debugging') return;
+
             if (data && data.data) {
                 // Remove trailing newlines for cleaner output if desired, or keep raw
                 addOutput(data.data);

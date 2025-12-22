@@ -70,6 +70,8 @@ export class DapClient extends EventEmitter {
     private handleData(data: Buffer) {
         console.log(`[DAP] <- Data chunk: ${data.length} bytes`);
         this.buffer = Buffer.concat([this.buffer, data]);
+        console.log(`[DAP DEBUG] Buffer start:`, this.buffer.slice(0, 100).toString('utf8'));
+        console.log(`[DAP DEBUG] Buffer len: ${this.buffer.length}, ContentLength: ${this.contentLength}`);
 
         while (true) {
             if (this.contentLength === -1) {
@@ -115,10 +117,19 @@ export class DapClient extends EventEmitter {
     }
 
     private handleMessage(message: DapMessage) {
+        console.log('[DAP] handleMessage full:', JSON.stringify(message));
         if (message.type === 'response') {
-            // ...
+            const pending = this.pendingRequests.get(message.request_seq);
+            if (pending) {
+                if (message.success) {
+                    pending.resolve(message.body);
+                } else {
+                    pending.reject(new Error(message.message || 'DAP Request Failed'));
+                }
+                this.pendingRequests.delete(message.request_seq);
+            }
         } else if (message.type === 'event') {
-            // console.log(`[DAP] <- Event: ${message.event}`, JSON.stringify(message.body));
+            console.log(`[DAP] <- Event: ${message.event}`, JSON.stringify(message.body));
             this.emit(message.event, message.body);
         }
     }

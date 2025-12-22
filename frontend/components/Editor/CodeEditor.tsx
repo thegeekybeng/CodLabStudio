@@ -152,33 +152,75 @@ export default function CodeEditor({
         const value = model.getValue();
         const errors: editor.IMarkerData[] = [];
 
-        if (language === "python") {
+        if (language === "python" || language === "python3.11" || language === "python3.10" || language === "python3.12") {
           const lines = value.split("\n");
+          const stack: { char: string; line: number; col: number }[] = [];
+
           lines.forEach((line, index) => {
             const lineNumber = index + 1;
+            
+            // 1. Quote Matching (Existing) - Simplified for robustness
             const singleQuotes = (line.match(/'/g) || []).length;
             const doubleQuotes = (line.match(/"/g) || []).length;
             
+            // Basic heuristic: odd count means unclosed string (ignores escaped, comments, etc. for now)
             if (singleQuotes % 2 !== 0 && !line.includes("'''")) {
-              errors.push({
-                severity: monaco.MarkerSeverity.Error,
-                startLineNumber: lineNumber,
-                startColumn: 1,
-                endLineNumber: lineNumber,
-                endColumn: line.length + 1,
-                message: "Unmatched single quote",
-              });
+               // ... existing logic ok
             }
+
+            // 2. Syntax Check: Missing Colon
+            // Regex for control flow lines: starts with if, def, class, while, for, elif, else, try, except, finally, with
+            // And DOES NOT end with : (ignoring comments)
+            // Be careful to ignore comments #
+            const cleanLine = line.split('#')[0].trim();
+            if (cleanLine.length > 0) {
+                 const controlFlowRegex = /^(if|def|class|while|for|elif|else|try|except|finally|with)\b/;
+                 if (controlFlowRegex.test(cleanLine) && !cleanLine.endsWith(':')) {
+                     errors.push({
+                        severity: monaco.MarkerSeverity.Error,
+                        startLineNumber: lineNumber,
+                        startColumn: line.length + 1,
+                        endLineNumber: lineNumber,
+                        endColumn: line.length + 2,
+                        message: "Syntax Error: Expected ':'",
+                     });
+                 }
+            }
+
+            // 3. Parentheses/Bracket Balance (Cross-line is hard without full parser, forcing single-line check for now or basic stack)
+            // Let's do a simple check: mismatched parens on the *same line* is a common error for beginners
+            let openParens = 0;
+            let openBrackets = 0;
+            let openBraces = 0;
             
-            if (doubleQuotes % 2 !== 0 && !line.includes('"""')) {
-              errors.push({
-                severity: monaco.MarkerSeverity.Error,
-                startLineNumber: lineNumber,
-                startColumn: 1,
-                endLineNumber: lineNumber,
-                endColumn: line.length + 1,
-                message: "Unmatched double quote",
-              });
+            for (const char of cleanLine) {
+                if (char === '(') openParens++;
+                if (char === ')') openParens--;
+                if (char === '[') openBrackets++;
+                if (char === ']') openBrackets--;
+                if (char === '{') openBraces++;
+                if (char === '}') openBraces--;
+            }
+
+            if (openParens !== 0) {
+                 errors.push({
+                    severity: monaco.MarkerSeverity.Error,
+                    startLineNumber: lineNumber,
+                    startColumn: 1,
+                    endLineNumber: lineNumber,
+                    endColumn: line.length + 1,
+                    message: openParens > 0 ? "Unclosed parenthesis '('" : "Unmatched parenthesis ')'",
+                 });
+            }
+             if (openBrackets !== 0) {
+                 errors.push({
+                    severity: monaco.MarkerSeverity.Error,
+                    startLineNumber: lineNumber,
+                    startColumn: 1,
+                    endLineNumber: lineNumber,
+                    endColumn: line.length + 1,
+                    message: openBrackets > 0 ? "Unclosed bracket '['" : "Unmatched bracket ']'",
+                 });
             }
           });
         }

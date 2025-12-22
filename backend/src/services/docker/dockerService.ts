@@ -17,6 +17,7 @@ export interface ContainerConfig {
   networkMode?: string; // Add support for custom networks
   readonlyRootfs?: boolean;
   binds?: string[];
+  labels?: Record<string, string>;
 }
 
 export interface ExecutionResult {
@@ -60,6 +61,7 @@ export class DockerService {
         AttachStdout: true,
         AttachStderr: true,
         Tty: false,
+        Labels: config.labels || {},
       };
 
       const container = await docker.createContainer(containerConfig);
@@ -94,6 +96,7 @@ export class DockerService {
 
       // Create a script that writes code and executes it
       const executeScript = this.createExecuteScript(language, code);
+      console.log('[DOCKER] Executing script:', executeScript);
 
       // Execute the script
       const exec = await container.exec({
@@ -123,18 +126,29 @@ export class DockerService {
         container.modem.demuxStream(stream, {
           write: (chunk: Buffer) => {
             const data = chunk.toString();
+            console.log('[STREAM DEBUG] stdout chunk:', data);
             stdout += data;
             if (onProgress) onProgress('stdout', data);
           },
         }, {
           write: (chunk: Buffer) => {
             const data = chunk.toString();
+            console.log('[STREAM DEBUG] stderr chunk:', data);
             stderr += data;
             if (onProgress) onProgress('stderr', data);
           },
         });
 
+        stream.on('data', (chunk) => {
+          console.log('[DOCKER RAW STREAM] Chunk length:', chunk.length);
+          // Optional: Print first few bytes to see header
+          if (chunk.length >= 8) {
+            console.log('[DOCKER RAW HEADER]', chunk.slice(0, 8));
+          }
+        });
+
         stream.on('end', async () => {
+          console.log('[DOCKER STREAM] Stream ended');
           clearTimeout(timeout);
           try {
             const inspect = await exec.inspect();
@@ -205,7 +219,7 @@ export class DockerService {
       case 'python3.10':
       case 'python3.11':
       case 'python3.12':
-        return `echo '${escapedCode}' > /tmp/code.py && python3 /tmp/code.py`;
+        return `echo '${escapedCode}' > /tmp/code.py && python3 -u /tmp/code.py`;
       case 'javascript':
       case 'js':
       case 'node':
@@ -306,6 +320,80 @@ export class DockerService {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  async pruneSessionContainers(): Promise<void> {
+    try {
+      console.log('[DOCKER] Scanning for orphan session containers (Legacy & Labeled)...');
+
+      // 1. Get ALL containers (we need to inspect ones without labels too)
+      const containers = await docker.listContainers({ all: true });
+
+      if (containers.length === 0) {
+        console.log('[DOCKER] No containers found.');
+        return;
+      }
+
+      const ZOMBIE_IMAGES = [
+        'codlab-python:latest',
+        'node:20-alpine',
+        'golang:1.21-alpine',
+        'python:3.10-alpine',
+        'python:3.12-alpine',
+        'node:18-alpine',
+        'eclipse-temurin:17-alpine',
+        'gcc:latest',
+        'rust:1.70-alpine',
+        'ruby:3.2-alpine',
+        'php:8.2-alpine'
+      ];
+
+      const zombies = containers.filter((info) => {
+        const labels = info.Labels || {};
+
+        // Criterion 1: New Labeled Zombies
+        if (labels['type'] === 'session_worker' && labels['app'] === 'codlabstudio') {
+          return true;
+        }
+
+        // Criterion 2: Legacy Zombies (No Compose Project, Known Image)
+        const isComposeProject = labels['com.docker.compose.project'] !== undefined;
+        const isSystemContainer = labels['io.portainer.server'] !== undefined; // Safe guard
+        const image = info.Image;
+
+        // Check if image matches any of our known runtime images (or starts with them)
+        const isRuntimeImage = ZOMBIE_IMAGES.some(img => image.includes(img) || img.includes(image));
+
+        if (!isComposeProject && !isSystemContainer && isRuntimeImage) {
+          console.log(`[DOCKER] Identified Legacy Zombie: ${info.Names[0]} (${image})`);
+          return true;
+        }
+
+        return false;
+      });
+
+      if (zombies.length === 0) {
+        console.log('[DOCKER] No orphan containers found.');
+        return;
+      }
+
+      console.log(`[DOCKER] Found ${zombies.length} orphan containers. Reaping...`);
+
+      const promises = zombies.map(async (info) => {
+        try {
+          const container = docker.getContainer(info.Id);
+          await container.remove({ force: true });
+          console.log(`[DOCKER] Reaped container: ${info.Id.substring(0, 12)} (${info.Names[0]})`);
+        } catch (e) {
+          console.error(`[DOCKER] Failed to reap container ${info.Id.substring(0, 12)}:`, e);
+        }
+      });
+
+      await Promise.all(promises);
+      console.log('[DOCKER] Cleanup complete.');
+    } catch (error) {
+      console.error('[DOCKER] Startup cleanup failed:', error);
     }
   }
 }

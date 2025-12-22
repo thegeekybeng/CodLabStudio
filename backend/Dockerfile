@@ -1,3 +1,4 @@
+# --- 1. BUILD STAGE ---
 FROM node:20-slim AS builder
 
 WORKDIR /app
@@ -22,6 +23,7 @@ RUN npm run db:generate
 RUN npm run build
 
 # Production stage
+# --- 2. DEVELOPMENT STAGE ---
 FROM node:20-slim AS development
 
 WORKDIR /app
@@ -44,6 +46,7 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 RUN npm run db:generate
 
 # Production stage
+# --- 3. PRODUCTION STAGE ---
 FROM node:20-slim AS production
 
 WORKDIR /app
@@ -67,6 +70,7 @@ RUN if [ -f package-lock.json ]; then npm ci --only=production; else npm install
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
+# --- 4. RUNTIME CONFIGURATION ---
 # Create non-root user
 RUN groupadd -r -g 1001 nodejs && \
     useradd -r -u 1001 -g nodejs nodejs
