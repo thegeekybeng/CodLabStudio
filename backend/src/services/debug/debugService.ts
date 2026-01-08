@@ -33,6 +33,10 @@ const DEBUG_CONFIG: Record<string, { cmd: string; port: number }> = {
   // Add other languages here
 };
 
+const LANGUAGE_ALIAS_MAP: Record<string, string> = {
+  py: 'python',
+};
+
 export class DebugService {
   private activeClients = new Map<string, DapClient>(); // sessionId -> DapClient
 
@@ -56,8 +60,11 @@ export class DebugService {
     await dockerService.executeCode(container, writeCmd, 'sh'); // Quick write using shell (bash might not be installed)
 
     // 3. Get Debug Config
-    const config = DEBUG_CONFIG[normalizedLanguage] || DEBUG_CONFIG['python']; // Fallback/Default
-    if (!config) throw new AppError('Debug not supported for this language', 400);
+    const targetLanguage = LANGUAGE_ALIAS_MAP[normalizedLanguage] || normalizedLanguage;
+    if (!Object.prototype.hasOwnProperty.call(DEBUG_CONFIG, targetLanguage)) {
+      throw new AppError(`Debug not supported for language: ${normalizedLanguage}`, 400);
+    }
+    const config = DEBUG_CONFIG[targetLanguage];
 
     const debugCmd = config.cmd.replace('{sessionId}', sessionId);
 
@@ -104,9 +111,6 @@ export class DebugService {
     if (!connected || !client) throw new AppError('Failed to connect to debugger', 500);
 
     this.activeClients.set(sessionId, client);
-
-    // 7. Initialize DAP
-    this.setupDapListeners(sessionId, userId, client);
 
     // 7. Initialize DAP
     this.setupDapListeners(sessionId, userId, client);

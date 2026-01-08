@@ -33,6 +33,7 @@ seed().catch((error) => {
 });
 
 const app = express();
+app.set('trust proxy', 1);
 const httpServer = createServer(app);
 // Socket.IO CORS - allow multiple origins
 const socketOrigins = process.env.CORS_ORIGIN
