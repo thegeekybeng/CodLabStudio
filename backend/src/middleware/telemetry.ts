@@ -23,9 +23,12 @@ export const telemetryMiddleware = (req: Request, _res: Response, next: NextFunc
     // Extract User Agent
     const ua = req.headers['user-agent'] || 'unknown';
 
+    // Extract Referer
+    const ref = req.headers['referer'] || 'direct';
+
     // Log Telemetry
-    // Format: [TELEMETRY] IP=<ip> PATH=<path> UA=<user_agent>
-    console.log(`[TELEMETRY] IP=${ip} PATH=${req.path} UA=${ua}`);
+    // Format: [TELEMETRY] IP=<ip> PATH=<path> REF=<referer> UA=<user_agent>
+    console.log(`[TELEMETRY] IP=${ip} PATH=${req.path} REF=${ref} UA=${ua}`);
 
     next();
 };
