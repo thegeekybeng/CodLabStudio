@@ -1,12 +1,13 @@
-import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { AuthRequest } from '../middleware/auth';
-import { guestSessionMiddleware, GuestRequest } from '../middleware/guestSession';
-import { AppError } from '../middleware/errorHandler';
-import { sessionZipService } from '../services/session/sessionZipService';
-import { sessionService } from '../services/session/sessionService';
-
-const prisma = new PrismaClient();
+import { Router, Response } from "express";
+import prisma from "../database/client";
+import { AuthRequest } from "../middleware/auth";
+import {
+  guestSessionMiddleware,
+  GuestRequest,
+} from "../middleware/guestSession";
+import { AppError } from "../middleware/errorHandler";
+import { sessionZipService } from "../services/session/sessionZipService";
+import { sessionService } from "../services/session/sessionService";
 
 const router = Router();
 
@@ -14,7 +15,7 @@ const router = Router();
  * Create/Start a new session
  */
 router.post(
-  '/',
+  "/",
   // Conditional authentication
   guestSessionMiddleware,
   async (req: AuthRequest | GuestRequest, res, next) => {
@@ -26,39 +27,40 @@ router.post(
       if (authReq.userId) {
         userId = authReq.userId;
       } else if (guestReq.guestSessionId) {
-        userId = 'guest_' + guestReq.guestSessionId;
+        userId = "guest_" + guestReq.guestSessionId;
       } else {
-        throw new AppError('Session not found', 401);
+        throw new AppError("Session not found", 401);
       }
 
       const { language } = req.body;
-      if (!language) throw new AppError('Language is required', 400);
+      if (!language) throw new AppError("Language is required", 400);
 
       const result = await sessionService.createSession({
         userId,
-        language
+        language,
       });
 
       res.json({
         success: true,
         data: {
           ...result,
-          userId // Send back the userId (e.g. guest_xyz) so frontend socket can join room
-        }
+          userId, // Send back the userId (e.g. guest_xyz) so frontend socket can join room
+        },
       });
     } catch (error) {
       next(error);
     }
-  });
+  }
+);
 
 /**
  * Get supported languages
  */
-router.get('/languages', (_req, res) => {
+router.get("/languages", (_req, res) => {
   const languages = sessionService.getSupportedLanguages();
   res.json({
     success: true,
-    data: languages
+    data: languages,
   });
 });
 
@@ -66,7 +68,7 @@ router.get('/languages', (_req, res) => {
  * Get session statistics (for UI display)
  */
 router.get(
-  '/stats',
+  "/stats",
   guestSessionMiddleware,
   async (req: AuthRequest | GuestRequest, res, next) => {
     try {
@@ -81,7 +83,7 @@ router.get(
       } else if (guestReq.guestSessionId) {
         guestSessionId = guestReq.guestSessionId;
       } else {
-        throw new AppError('Session not found', 401);
+        throw new AppError("Session not found", 401);
       }
 
       // Get statistics
@@ -125,7 +127,7 @@ router.get(
  * Works for both authenticated users and guest sessions
  */
 router.get(
-  '/download',
+  "/download",
   guestSessionMiddleware, // Allow guest sessions
   async (req: AuthRequest | GuestRequest, res: Response, next) => {
     try {
@@ -141,7 +143,10 @@ router.get(
       } else if (guestReq.guestSessionId) {
         guestSessionId = guestReq.guestSessionId;
       } else {
-        throw new AppError('Session not found. Please ensure you are logged in or in guest mode.', 401);
+        throw new AppError(
+          "Session not found. Please ensure you are logged in or in guest mode.",
+          401
+        );
       }
 
       // Generate zip file
@@ -156,9 +161,12 @@ router.get(
 
       // Set response headers
       const filename = `session_export_${Date.now()}.zip`;
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.setHeader('Content-Length', zipBuffer.length.toString());
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+      res.setHeader("Content-Length", zipBuffer.length.toString());
 
       // Send zip file
       res.send(zipBuffer);
@@ -172,7 +180,7 @@ router.get(
  * Get session status
  */
 router.get(
-  '/:sessionId',
+  "/:sessionId",
   guestSessionMiddleware,
   async (req: AuthRequest | GuestRequest, res, next) => {
     try {
@@ -182,7 +190,7 @@ router.get(
       // If we get here, session exists
       res.json({
         success: true,
-        data: { sessionId, active: true, containerId }
+        data: { sessionId, active: true, containerId },
       });
     } catch (error) {
       next(error);
@@ -194,13 +202,13 @@ router.get(
  * Stop session
  */
 router.delete(
-  '/:sessionId',
+  "/:sessionId",
   guestSessionMiddleware,
   async (req: AuthRequest | GuestRequest, res, next) => {
     try {
       const { sessionId } = req.params;
       await sessionService.stopSession(sessionId);
-      res.json({ success: true, message: 'Session stopped' });
+      res.json({ success: true, message: "Session stopped" });
     } catch (error) {
       next(error);
     }
@@ -208,4 +216,3 @@ router.delete(
 );
 
 export default router;
-

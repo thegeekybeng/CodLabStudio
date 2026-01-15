@@ -1,7 +1,7 @@
 # --- 1. SERVICES CONFIGURATION ---
 services:
   # --- 1.1 DATABASE SERVICE ---
-  postgres:
+  codlabstudio-db-prod:
     image: postgres:15-alpine
     container_name: codlabstudio-db-prod
     environment:
@@ -10,7 +10,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
-#       - ./database/init:/docker-entrypoint-initdb.d
+    #       - ./database/init:/docker-entrypoint-initdb.d
     networks:
       - notebook-network-prod
     restart: always
@@ -31,7 +31,7 @@ services:
     command: sh -c "npm run db:generate && npx prisma db push && node dist/index.js"
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@codlabstudio-db-prod:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       PORT: 3001
@@ -46,7 +46,7 @@ services:
       - ./repos:/app/repos
       - codlabstudio_packages:/app/packages
     depends_on:
-      postgres:
+      codlabstudio-db-prod:
         condition: service_healthy
     networks:
       - notebook-network-prod
